@@ -18,29 +18,44 @@ export const algorandBoltFileTree: FileSystemTree = {
             preview: "vite preview",
           },
           dependencies: {
-            "@algorandfoundation/algokit-utils": "^6.0.4",
-            "@blockshake/defly-connect": "^1.1.6",
-            "@perawallet/connect": "^1.3.4",
-            "@txnlab/use-wallet-react": "^3.0.1",
-            "@txnlab/use-wallet-ui-react": "^3.0.1",
-            algosdk: "^2.7.0",
-            react: "^18.2.0",
-            "react-dom": "^18.2.0",
+            "@algorandfoundation/algokit-utils": "^9.1.0",
+    "@algorandfoundation/algokit-subscriber": "^3.2.0",
+    "@blockshake/defly-connect": "^1.2.1",
+    "@perawallet/connect": "^1.4.2",
+    "@txnlab/use-wallet-react": "^4.0.1",
+    "@txnlab/use-wallet-ui-react": "^0.2.3",
+    "@walletconnect/modal": "^2.7.0",
+    "@walletconnect/sign-client": "^2.20.2",
+            "lucide-react": "^0.508.0",
+    "lute-connect": "^1.6.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+            "algosdk": "^3.2.0",
+            
           },
           devDependencies: {
-            "@types/react": "^18.2.66",
-            "@types/react-dom": "^18.2.22",
+            
             "@typescript-eslint/eslint-plugin": "^7.2.0",
             "@typescript-eslint/parser": "^7.2.0",
-            "@vitejs/plugin-react": "^4.2.1",
-            autoprefixer: "^10.4.19",
-            eslint: "^8.57.0",
-            "eslint-plugin-react-hooks": "^4.6.0",
-            "eslint-plugin-react-refresh": "^0.4.6",
-            postcss: "^8.4.38",
-            tailwindcss: "^3.4.3",
-            typescript: "^5.2.2",
-            vite: "^5.2.0",
+            "@types/react": "^18.2.55",
+    "@types/react-dom": "^18.2.19",
+    "@vitejs/plugin-react": "^4.4.1",
+    "autoprefixer": "^10.4.21",
+    "eslint": "^9.26.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
+    "eslint-plugin-tailwindcss": "^3.18.0",
+    "globals": "^16.0.0",
+    "postcss": "^8.5.3",
+    "prettier": "^3.5.3",
+    "prettier-plugin-tailwindcss": "^0.6.11",
+    "tailwindcss": "^3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.30.1",
+    "vite": "^6.3.4",
+    "vite-plugin-node-polyfills": "^0.23.0",
+            
+
           },
         },
         null,
@@ -50,25 +65,26 @@ export const algorandBoltFileTree: FileSystemTree = {
   },
   "vite.config.ts": {
     file: {
-      contents: `import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+      contents: `import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
-// https://vitejs.dev/config/
+// https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
-  define: {
-    global: 'globalThis',
-  },
-  server: {
-    port: 3000,
-  },
-})
-`,
+  plugins: [
+    react(),
+    nodePolyfills({
+      globals: {
+        Buffer: true,
+      },
+    }),
+  ],
+})`,
     },
   },
   "index.html": {
     file: {
-      contents: `<!doctype html>
+      contents: `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -89,8 +105,9 @@ export default defineConfig({
       contents: `/** @type {import('tailwindcss').Config} */
 export default {
   content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
+    './src/**/*.{js,ts,jsx,tsx}',
+    // Add this line to scan our components
+    './node_modules/@txnlab/use-wallet-ui-react/dist/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     extend: {},
@@ -209,77 +226,59 @@ This template includes integration with:
     directory: {
       "main.tsx": {
         file: {
-          contents: `import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.tsx'
-import './index.css'
+          contents: `import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+import './index.css';
+import App from './App.tsx';
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
     <App />
-  </React.StrictMode>,
-)
+  </StrictMode>
+);
 `,
         },
       },
       "App.tsx": {
         file: {
-          contents: `import { useState, useEffect } from "react";
-import {
+          contents: `import {
+  NetworkId,
+  WalletId,
+  WalletManager,
   WalletProvider,
-  useInitializeProviders,
-  PROVIDER_ID,
-} from "@txnlab/use-wallet-react";
-import { WalletUIProvider, WalletButton } from "@txnlab/use-wallet-ui-react";
-import { WalletInfo } from "./components/WalletInfo";
-import { TextWithCopy } from "./components/TextWithCopy";
+} from '@txnlab/use-wallet-react'
+import { WalletUIProvider, WalletButton } from '@txnlab/use-wallet-ui-react'
+import { WalletInfo } from './components/WalletInfo'
+import { TextWithCopy } from './components/TextWithCopy'
 
-export default function App() {
-  const [walletManager, setWalletManager] = useState(null);
+const walletManager = new WalletManager({
+  wallets: [
+    WalletId.PERA,
+    WalletId.DEFLY,
+    WalletId.LUTE,
+    WalletId.EXODUS,
+    {
+      id: WalletId.WALLETCONNECT,
+      options: { projectId: 'fcfde0713d43baa0d23be0773c80a72b' },
+    },
+  ],
+  defaultNetwork: NetworkId.TESTNET,
+})
 
-  useEffect(() => {
-    const initWalletManager = async () => {
-      const { WalletManager, NetworkId } = await import("@txnlab/use-wallet-react");
-      
-      const manager = new WalletManager({
-        wallets: [
-          PROVIDER_ID.PERA,
-          PROVIDER_ID.DEFLY,
-          PROVIDER_ID.LUTE,
-          PROVIDER_ID.EXODUS,
-          {
-            id: PROVIDER_ID.WALLETCONNECT,
-            options: { projectId: "fcfde071d3d43bae0d23e0773c80a2b1" },
-          },
-        ],
-        network: NetworkId.TESTNET,
-      });
-      
-      setWalletManager(manager);
-    };
-
-    initWalletManager();
-  }, []);
-
-  if (!walletManager) {
-    return (
-      <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-        <div className="flex justify-center items-center h-16">
-          <span className="text-lg font-semibold">Loading...</span>
-        </div>
-      </div>
-    );
-  }
-
+function App() {
   return (
     <WalletProvider manager={walletManager}>
       <WalletUIProvider>
-        <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-          <header className="w-full bg-white dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700/50">
+        <div className="min-h-screen bg-white dark:bg-[#001324] text-gray-900 dark:text-gray-100">
+          {/* Header */}
+          <header className="w-full bg-white dark:bg-gray-800/30 border-b border-gray-200 dark:border-gray-700/50">
             <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex justify-between items-center h-16">
                 <div className="flex-shrink-0">
-                  <span className="text-lg font-semibold">Algorand React Starter</span>
+                  <span className="text-lg font-semibold ">
+                    Algorand React Starter
+                  </span>
                 </div>
                 <div>
                   <WalletButton />
@@ -287,15 +286,160 @@ export default function App() {
               </div>
             </div>
           </header>
-          
-          <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {/* Main content area */}
+          <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
             <WalletInfo />
+            <div className="mt-8">
+            <h1 className="text-3xl font-bold  mb-4">Algorand Resources</h1>
+              <div className="flex flex-col gap-2 my-4">
+                <p className=" mx-auto">
+                  This example demonstrates a foundation for building a web app
+                  with connectivity to the Algorand blockchain. It includes
+                  prompts to guide Bolt in building with you. The instructions
+                  and resources below can be ripped out as you start crafting
+                  your own app. Note that  the AlgoKit Subscriber and Utils libraries 
+                  are available in both TypeScript and Python.
+                </p>
+              </div>  
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                <div className="bg-gray-50 dark:bg-gray-800/50 p-8 rounded-lg">
+                  <h2 className="text-xl font-semibold mb-3">Learning Resources</h2>
+                  <ul className="space-y-2">
+                    <li>
+                      <a href="https://dev.algorand.co/" 
+                         className="text-blue-500 hover:underline" target="_blank">
+                        Developer Portal & Docs
+                      </a>
+                    </li>
+                    <li>
+                      <a href="https://examples.dev.algorand.co/" 
+                         className="text-blue-500 hover:underline" target="_blank">
+                        Example Gallery
+                      </a>
+                    </li>
+                    <li>
+                      <a href="https://tutorials.dev.algorand.co/" 
+                         className="text-blue-500 hover:underline" target="_blank">
+                        Interactive AlgoKit Code Tutorials
+                      </a>
+                    </li>
+                    <li>
+                      <a href="https://dev.algorand.co/arc-standards/" 
+                         className="text-blue-500 hover:underline" target="_blank">
+                        ARC Standards
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="bg-gray-50 dark:bg-gray-800/50 p-8 rounded-lg">
+                  <h2 className="text-xl font-semibold mb-3">Core Tools</h2>
+                  <ul className="space-y-2">
+                    <li>
+                      <a href="https://dev.algorand.co/algokit/algokit-intro/" 
+                         className="text-blue-500 hover:underline" target="_blank">
+                        AlgoKit Developer Kit
+                      </a>
+                    </li>
+                    <li>
+                      <a href="https://lora.algokit.io/" 
+                         className="text-blue-500 hover:underline" target="_blank">
+                        Lora Block Explorer
+                      </a>
+                    </li>
+                    <li>
+                      <a href="https://www.npmjs.com/package/@algorandfoundation/algokit-utils" 
+                         className="text-blue-500 hover:underline" target="_blank">
+                        AlgoKit Utils (v9.0.1)
+                      </a>
+                    </li>
+                    <li>
+                      <a href="https://www.npmjs.com/package/@algorandfoundation/algokit-subscriber" 
+                         className="text-blue-500 hover:underline" target="_blank">
+                        AlgoKit Subscriber (v3.2.0) 
+                      </a>
+                    </li>
+                    <li>
+                      <a href="https://www.npmjs.com/package/@txnlab/use-wallet-ui-react" 
+                         className="text-blue-500 hover:underline" target="_blank">
+                        use-wallet-ui-react (v0.2.2)
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+
+
+                <div className="bg-gray-50 dark:bg-gray-800/50 p-8 rounded-lg">
+                  <h2 className="text-xl font-semibold mb-3">Community</h2>
+                  <ul className="space-y-2">
+                    <li>
+                      <a href="https://discord.com/invite/algorand" 
+                         className="text-blue-500 hover:underline" target="_blank">
+                        Algorand Discord
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="bg-gray-50 dark:bg-gray-800/50 p-8 rounded-lg">
+                  <h2 className="text-xl font-semibold mb-3">Smart Contract Languages</h2>
+                  <ul className="space-y-2">
+                    <li>
+                      <a href="https://dev.algorand.co/algokit/languages/python/overview/" 
+                         className="text-blue-500 hover:underline" target="_blank">
+                        Algorand Python
+                      </a>
+                    </li>
+                    <li>
+                      <a href="https://dev.algorand.co/algokit/languages/typescript/overview/" 
+                         className="text-blue-500 hover:underline" target="_blank">
+                        Algorand Typescript
+                      </a>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="my-8">
+              <h1 className="text-3xl font-bold my-8">Bolt.new Integration Guide</h1>
+              <div className="flex flex-col gap-4 my-4">
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-lg">
+                  <h2 className="text-xl font-semibold mb-2">Initial Setup Prompt</h2>
+                  <p className="mb-2">Use this in discussion mode to configure Bolt for Algorand development:</p>
+
+                </div>
+
+                <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+                  <h2 className="text-xl font-semibold mb-2">Common Use Case Prompts</h2>
+                  <div className="space-y-3">
+                      <h3 className="font-medium">Transaction Sending</h3>
+                    </div>
+                    <div>
+                      <h3 className="font-medium">Account Management</h3>
+                    </div>
+                    <div>
+                    <div>
+                      <h3 className="font-medium">Contract Interaction</h3>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg">
+                  <h2 className="text-xl font-semibold mb-2">AlgoKit Implementation Note</h2>
+                  <p>Because Bolt.new doesn't support AlgoKit LocalNet, you can use this workaround:</p>
+                </div>
+              </div>
+            </div>
           </main>
         </div>
       </WalletUIProvider>
     </WalletProvider>
-  );
+  )
 }
+
+export default App
 `,
         },
       },
@@ -304,76 +448,6 @@ export default function App() {
           contents: `@tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
-}
 `,
         },
       },
@@ -381,120 +455,128 @@ button:focus-visible {
         directory: {
           "WalletInfo.tsx": {
             file: {
-              contents: `import { useWallet } from "@txnlab/use-wallet-react";
-import { TextWithCopy } from "./TextWithCopy";
+              contents: `import { useWallet } from '@txnlab/use-wallet-react';
+import { useAccountInfo, useNfd, NfdAvatar } from '@txnlab/use-wallet-ui-react';
+import { formatNumber, formatShortAddress } from '@txnlab/utils-ts';
 
 export function WalletInfo() {
-  const { activeAccount, activeWallet } = useWallet();
+  const { activeAddress } = useWallet();
+  const nfdQuery = useNfd();
+  const accountQuery = useAccountInfo();
 
-  if (!activeWallet) {
+  if (!activeAddress) {
     return (
-      <div className="text-center py-12">
-        <h2 className="text-2xl font-bold mb-4">Welcome to Algorand React Starter</h2>
-        <p className="text-gray-600 dark:text-gray-400 mb-8">
-          Connect your wallet to get started with Algorand development
+      <div className="text-center p-8 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700">
+        <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+          Connect Your Wallet
+        </h3>
+        <p className="text-gray-600 dark:text-gray-300">
+          Connect your Algorand wallet to view your NFD profile and balance
         </p>
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4">Features</h3>
-          <ul className="text-left space-y-2">
-            <li>• Wallet integration with Pera, Defly, and more</li>
-            <li>• AlgoKit Utils for blockchain interactions</li>
-            <li>• TypeScript and React 18</li>
-            <li>• TailwindCSS for styling</li>
-          </ul>
-        </div>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-6">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-        <h2 className="text-xl font-semibold mb-4">Wallet Information</h2>
-        
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Wallet Provider
-            </label>
-            <p className="text-lg font-mono bg-gray-50 dark:bg-gray-700 p-2 rounded">
-              {activeWallet.metadata.name}
-            </p>
-          </div>
-          
-          {activeAccount && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Account Address
-                </label>
-                <TextWithCopy text={activeAccount.address} />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Balance
-                </label>
-                <p className="text-lg font-mono bg-gray-50 dark:bg-gray-700 p-2 rounded">
-                  {(activeAccount.minBalance / 1000000).toFixed(6)} ALGO
-                </p>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-      
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-2">
-          Ready to Build!
-        </h3>
-        <p className="text-blue-800 dark:text-blue-200">
-          Your wallet is connected and ready for Algorand development. 
-          Start building your decentralized application!
+  if (nfdQuery.isLoading || accountQuery.isLoading) {
+    return (
+      <div className="text-center p-8 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700">
+        <p className="text-gray-600 dark:text-gray-300">
+          Loading wallet data...
         </p>
       </div>
+    );
+  }
+
+  const nfd = nfdQuery.data ?? null;
+  const accountInfo = accountQuery.data;
+  const algoBalance = accountInfo ? Number(accountInfo.amount) / 1_000_000 : 0;
+
+  return (
+    <div className="p-8 bg-white dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div className="flex items-center gap-4">
+          <NfdAvatar nfd={nfd} size={64} className="rounded-xl" />
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+              {nfd?.name || formatShortAddress(activeAddress)}
+            </h2>
+            {nfd?.name && (
+              <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">
+                {formatShortAddress(activeAddress)}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+          <p className="text-sm text-gray-500 dark:text-gray-400">Balance</p>
+          <p className="text-xl font-bold text-gray-900 dark:text-white">
+            {formatNumber(algoBalance, { fractionDigits: 4 })} ALGO
+          </p>
+        </div>
+      </div>
+
+      {nfd?.properties?.userDefined &&
+        Object.keys(nfd.properties.userDefined).length > 0 && (
+          <div className="mt-6 pt-6 border-t border-gray-100 dark:border-gray-700">
+            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">
+              NFD Properties
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {Object.entries(nfd.properties.userDefined).map(
+                ([key, value]) => (
+                  <div
+                    key={key}
+                    className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg"
+                  >
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
+                      {key}
+                    </p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      {value}
+                    </p>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        )}
     </div>
   );
 }
-`,
+  `,
             },
           },
           "TextWithCopy.tsx": {
             file: {
-              contents: `import { useState } from "react";
+              contents: `import { useState } from 'react';
+import { Copy, Check } from 'lucide-react';
 
-interface TextWithCopyProps {
-  text: string;
-  className?: string;
-}
-
-export function TextWithCopy({ text, className = "" }: TextWithCopyProps) {
+export const TextWithCopy = ({ text }: { text: string }) => {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      console.error("Failed to copy text: ", err);
-    }
+    });
   };
 
   return (
-    <div className={\`flex items-center space-x-2 \${className}\`}>
-      <code className="flex-1 bg-gray-50 dark:bg-gray-700 p-2 rounded font-mono text-sm break-all">
+    <div className="bg-gray-100 dark:bg-gray-800 rounded-lg p-4">
+      <pre className="whitespace-pre-wrap text-sm text-left bg-gray-50 dark:bg-gray-900 p-3 rounded border border-gray-300 dark:border-gray-700 overflow-x-auto">
         {text}
-      </code>
+      </pre>
       <button
-        onClick={handleCopy}
-        className="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded text-sm font-medium transition-colors"
+        className="mt-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors flex items-center gap-2"
+        onClick={copyToClipboard}
       >
-        {copied ? "Copied!" : "Copy"}
+        {copied ? <Check size={16} /> : <Copy size={16} />}
+        {copied ? 'Copied!' : 'Copy to clipboard'}
       </button>
     </div>
   );
-}
+};
 `,
             },
           },
