@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { User, Bot, Copy, Check, Play, FileText } from "lucide-react"
@@ -29,6 +29,24 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
   ])
   const [isLoading, setIsLoading] = useState(false)
   const [copiedBlocks, setCopiedBlocks] = useState<Set<string>>(new Set())
+
+  const scrollAreaRef = useRef<HTMLDivElement>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const scrollToBottom = () => {
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "end",
+        })
+      }
+    }
+
+    // Small delay to ensure DOM is updated
+    const timeoutId = setTimeout(scrollToBottom, 100)
+    return () => clearTimeout(timeoutId)
+  }, [messages, isLoading])
 
   const extractCodeBlocks = (content: string): CodeBlock[] => {
     const codeBlockRegex = /```(\w+)?\s*(?:file="([^"]+)")?\n([\s\S]*?)```/g
@@ -216,45 +234,31 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
     }
   }
 
-  const quickPrompts = [
-    "Create a React component for a todo list",
-    "Build a responsive navbar with Tailwind CSS",
-    "Generate a contact form with validation",
-    "Create a dashboard layout with sidebar",
-    "Build a product card component",
-    "Generate API endpoints for user management",
-  ]
+  // const quickPrompts = [
+  //   "Create a React component for a todo list",
+  //   "Build a responsive navbar with Tailwind CSS",
+  //   "Generate a contact form with validation",
+  //   "Create a dashboard layout with sidebar",
+  //   "Build a product card component",
+  //   "Generate API endpoints for user management",
+  // ]
 
   return (
-    <div className="flex flex-col h-full bg-zinc-900 border-r border-zinc-800">
-      <div className="p-4 border-b border-zinc-800">
+    <div className="flex flex-col h-full max-h-full bg-zinc-900 border-r border-zinc-800 overflow-hidden">
+      <div className="p-4 border-b border-zinc-800 flex-shrink-0">
         <h2 className="text-lg font-semibold text-white">AI Assistant</h2>
         <p className="text-sm text-zinc-400">Powered by Mistral AI</p>
       </div>
 
-      {/* Quick Prompts */}
-      {messages.length <= 1 && (
-        <div className="p-4 border-b border-zinc-800">
-          <h3 className="text-sm font-medium text-zinc-300 mb-2">Quick Start</h3>
-          <div className="space-y-2">
-            {quickPrompts.map((prompt, index) => (
-              <Button
-                key={index}
-                variant="ghost"
-                size="sm"
-                onClick={() => handleSubmit(prompt, "Agent")}
-                disabled={isLoading}
-                className="w-full justify-start text-left text-zinc-400 hover:text-white hover:bg-zinc-800 h-auto py-2 px-3"
-              >
-                <span className="text-xs">{prompt}</span>
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
 
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-4">
+      <ScrollArea
+        ref={scrollAreaRef}
+        className="flex-1 min-h-0 p-4 [&>div>div]:!block"
+        style={{
+          scrollBehavior: "smooth",
+        }}
+      >
+        <div className="space-y-4 pb-4">
           {messages.map((message) => (
             <div key={message.id} className="flex gap-3">
               <div className="flex-shrink-0">
@@ -287,10 +291,11 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
               </div>
             </div>
           )}
+          <div ref={messagesEndRef} className="h-1" />
         </div>
       </ScrollArea>
 
-      <div className="p-4 border-t border-zinc-800">
+      <div className="p-4 border-t border-zinc-800 flex-shrink-0">
         <ChatInput onSubmit={handleSubmit} disabled={isLoading} />
       </div>
     </div>

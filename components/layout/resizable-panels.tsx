@@ -63,8 +63,8 @@ export default function ResizablePanels({
   }, [isDragging, handleMouseMove, handleMouseUp])
 
   return (
-    <div ref={containerRef} className="flex h-full">
-      <div style={{ width: `${leftWidth}%` }} className="flex-shrink-0">
+    <div ref={containerRef} className="flex h-full overflow-hidden">
+      <div style={{ width: `${leftWidth}%` }} className="flex-shrink-0 overflow-hidden">
         {leftPanel}
       </div>
 
@@ -76,7 +76,7 @@ export default function ResizablePanels({
         onMouseDown={handleMouseDown}
       />
 
-      <div className="flex-1 min-w-0">{rightPanel}</div>
+      <div className="flex-1 min-w-0 overflow-hidden">{rightPanel}</div>
     </div>
   )
 }

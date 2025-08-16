@@ -289,10 +289,10 @@ export default function Home() {
   )
 
   return (
-    <div className="h-screen bg-zinc-950 flex flex-col">
+    <div className="h-screen bg-zinc-950 flex flex-col overflow-hidden">
       <Header isRunning={projectState.isRunning} onRun={handleRun} onStop={handleStop} projectName="Algokit IDE" />
 
-      <div className="flex-1">
+      <div className="flex-1 overflow-hidden">
         <ResizablePanels
           leftPanel={leftPanel}
           rightPanel={rightPanel}
