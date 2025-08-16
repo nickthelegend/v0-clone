@@ -8,9 +8,10 @@ interface HeaderProps {
   onRun: () => void
   onStop: () => void
   projectName?: string
+  onDownload?: () => void
 }
 
-export default function Header({ isRunning, onRun, onStop, projectName = "My Project" }: HeaderProps) {
+export default function Header({ isRunning, onRun, onStop, projectName = "My Project", onDownload }: HeaderProps) {
   return (
     <div className="h-12 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-4">
       <div className="flex items-center gap-4">
@@ -41,7 +42,13 @@ export default function Header({ isRunning, onRun, onStop, projectName = "My Pro
         <Button size="sm" variant="ghost" className="h-8 text-zinc-400 hover:text-white">
           <Share className="w-4 h-4" />
         </Button>
-        <Button size="sm" variant="ghost" className="h-8 text-zinc-400 hover:text-white">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8 text-zinc-400 hover:text-white"
+          onClick={onDownload}
+          title="Download project as ZIP"
+        >
           <Download className="w-4 h-4" />
         </Button>
         <Button size="sm" variant="ghost" className="h-8 text-zinc-400 hover:text-white">

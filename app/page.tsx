@@ -441,6 +441,72 @@ export default function Home() {
     }))
   }, [])
 
+  const handleDownload = useCallback(async () => {
+    try {
+      console.log("[v0] Starting project download...")
+
+      // Dynamically import JSZip to avoid SSR issues
+      const JSZip = (await import("jszip")).default
+      const zip = new JSZip()
+
+      // Add all files from fileContents to the zip
+      Object.entries(fileContents).forEach(([path, content]) => {
+        zip.file(path, content)
+      })
+
+      // Generate the zip file
+      const zipBlob = await zip.generateAsync({ type: "blob" })
+
+      // Create download link and trigger download
+      const url = URL.createObjectURL(zipBlob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = `${projectState.activeFile ? "algorand-project" : "algokit-project"}.zip`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+
+      console.log("[v0] Project downloaded successfully")
+
+      // Add success message to terminal
+      setProjectState((prev) => ({
+        ...prev,
+        terminal: {
+          ...prev.terminal,
+          history: [
+            ...prev.terminal.history,
+            {
+              id: Date.now().toString(),
+              type: "success" as const,
+              content: `📦 Project exported as ZIP file successfully!`,
+              timestamp: new Date(),
+            },
+          ],
+        },
+      }))
+    } catch (error) {
+      console.error("[v0] Failed to download project:", error)
+
+      // Add error message to terminal
+      setProjectState((prev) => ({
+        ...prev,
+        terminal: {
+          ...prev.terminal,
+          history: [
+            ...prev.terminal.history,
+            {
+              id: Date.now().toString(),
+              type: "error" as const,
+              content: `❌ Failed to export project: ${error.message}`,
+              timestamp: new Date(),
+            },
+          ],
+        },
+      }))
+    }
+  }, [fileContents, projectState.activeFile])
+
   const leftPanel = <ChatInterface onCodeGenerated={handleCodeGenerated} />
 
   const rightPanel = (
@@ -523,7 +589,13 @@ export default function Home() {
 
   return (
     <div className="h-screen bg-zinc-950 flex flex-col overflow-hidden">
-      <Header isRunning={projectState.isRunning} onRun={handleRun} onStop={handleStop} projectName="Algokit IDE" />
+      <Header
+        isRunning={projectState.isRunning}
+        onRun={handleRun}
+        onStop={handleStop}
+        onDownload={handleDownload}
+        projectName="Algokit IDE"
+      />
 
       <div className="flex-1 min-h-0 overflow-hidden">
         <ResizablePanels
