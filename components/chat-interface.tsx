@@ -298,14 +298,7 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
     }
   }
 
-  const quickPrompts = [
-    "Create a React component for a todo list",
-    "Build a responsive navbar with Tailwind CSS",
-    "Generate a contact form with validation",
-    "Create a dashboard layout with sidebar",
-    "Build a product card component",
-    "Generate API endpoints for user management",
-  ]
+ 
 
   return (
     <div className="flex flex-col h-full max-h-full bg-zinc-900 border-r border-zinc-800 overflow-hidden">
@@ -314,26 +307,7 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
         <p className="text-sm text-zinc-400">Powered by Mistral AI</p>
       </div>
 
-      {/* Quick Prompts */}
-      {messages.length <= 1 && (
-        <div className="p-4 border-b border-zinc-800 flex-shrink-0">
-          <h3 className="text-sm font-medium text-zinc-300 mb-2">Quick Start</h3>
-          <div className="space-y-2">
-            {quickPrompts.map((prompt, index) => (
-              <Button
-                key={index}
-                variant="ghost"
-                size="sm"
-                onClick={() => handleSubmit(prompt, "Agent")}
-                disabled={isLoading}
-                className="w-full justify-start text-left text-zinc-400 hover:text-white hover:bg-zinc-800 h-auto py-2 px-3"
-              >
-                <span className="text-xs">{prompt}</span>
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
+      
 
       <ScrollArea
         ref={scrollAreaRef}
