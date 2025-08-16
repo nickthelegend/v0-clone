@@ -76,6 +76,7 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
   const renderMessageContent = (content: string, messageId: string) => {
     return (
       <ReactMarkdown
+        // className="prose prose-invert prose-sm max-w-none"
         components={{
           code({ node, inline, className, children, ...props }) {
             const match = /language-(\w+)/.exec(className || "")
@@ -250,13 +251,35 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
 
         console.log("[v0] Final assistant content:", assistantContent)
 
-        // Auto-apply code blocks if there's only one
-        const codeBlocks = assistantContent.match(/```(\w+)?\s*(?:file="([^"]+)")?\n([\s\S]*?)```/g)
-        if (codeBlocks && codeBlocks.length === 1 && onCodeGenerated) {
-          const block = codeBlocks[0]
-          setTimeout(() => {
-            onCodeGenerated(block, "generated.tsx")
-          }, 1000)
+        const codeBlockRegex = /```(\w+)?\s*(?:file[=:]?\s*["`']?([^"`'\n]+)["`']?)?\n([\s\S]*?)```/g
+        const codeBlocks: CodeBlock[] = []
+        let match
+
+        while ((match = codeBlockRegex.exec(assistantContent)) !== null) {
+          const [, language = "text", filename, code] = match
+          codeBlocks.push({
+            language,
+            code: code.trim(),
+            filename:
+              filename ||
+              `generated.${language === "tsx" ? "tsx" : language === "jsx" ? "jsx" : language === "typescript" ? "ts" : language === "javascript" ? "js" : "txt"}`,
+          })
+        }
+
+        // Auto-apply all code blocks if onCodeGenerated is available
+        if (codeBlocks.length > 0 && onCodeGenerated) {
+          console.log("[v0] Auto-applying", codeBlocks.length, "code blocks")
+
+          // Apply each code block with a small delay
+          codeBlocks.forEach((block, index) => {
+            setTimeout(
+              () => {
+                console.log("[v0] Auto-applying code block:", block.filename)
+                onCodeGenerated(block.code, block.filename)
+              },
+              (index + 1) * 500,
+            ) // Stagger applications by 500ms
+          })
         }
       }
     } catch (error) {
@@ -275,16 +298,42 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
     }
   }
 
-
+  const quickPrompts = [
+    "Create a React component for a todo list",
+    "Build a responsive navbar with Tailwind CSS",
+    "Generate a contact form with validation",
+    "Create a dashboard layout with sidebar",
+    "Build a product card component",
+    "Generate API endpoints for user management",
+  ]
 
   return (
     <div className="flex flex-col h-full max-h-full bg-zinc-900 border-r border-zinc-800 overflow-hidden">
-      {/* <div className="p-4 border-b border-zinc-800 flex-shrink-0">
+      <div className="p-4 border-b border-zinc-800 flex-shrink-0">
         <h2 className="text-lg font-semibold text-white">AI Assistant</h2>
         <p className="text-sm text-zinc-400">Powered by Mistral AI</p>
-      </div> */}
+      </div>
 
-     
+      {/* Quick Prompts */}
+      {messages.length <= 1 && (
+        <div className="p-4 border-b border-zinc-800 flex-shrink-0">
+          <h3 className="text-sm font-medium text-zinc-300 mb-2">Quick Start</h3>
+          <div className="space-y-2">
+            {quickPrompts.map((prompt, index) => (
+              <Button
+                key={index}
+                variant="ghost"
+                size="sm"
+                onClick={() => handleSubmit(prompt, "Agent")}
+                disabled={isLoading}
+                className="w-full justify-start text-left text-zinc-400 hover:text-white hover:bg-zinc-800 h-auto py-2 px-3"
+              >
+                <span className="text-xs">{prompt}</span>
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <ScrollArea
         ref={scrollAreaRef}

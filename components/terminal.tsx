@@ -228,9 +228,9 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
   }
 
   return (
-    <div className="h-64 bg-zinc-900 border-t border-zinc-700 flex flex-col">
+    <div className="h-64 min-h-[200px] max-h-[400px] bg-zinc-900 border-t border-zinc-700 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="h-8 bg-zinc-800 border-b border-zinc-700 flex items-center justify-between px-4">
+      <div className="h-8 bg-zinc-800 border-b border-zinc-700 flex items-center justify-between px-4 flex-shrink-0">
         <div className="flex items-center gap-2">
           <TerminalIcon className="w-4 h-4 text-green-400" />
           <span className="text-sm text-zinc-300">Terminal</span>
@@ -259,7 +259,7 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
       </div>
 
       {/* Quick Actions */}
-      <div className="px-2 py-1 bg-zinc-800 border-b border-zinc-700 flex gap-1 overflow-x-auto">
+      <div className="px-2 py-1 bg-zinc-800 border-b border-zinc-700 flex gap-1 overflow-x-auto flex-shrink-0">
         {quickActions.map((action) => (
           <Button
             key={action.command}
@@ -277,7 +277,7 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-2" ref={scrollRef}>
+      <ScrollArea className="flex-1 min-h-0 p-2" ref={scrollRef}>
         <div className="space-y-1 font-mono text-sm">
           {messages.map((message) => (
             <div
@@ -305,7 +305,7 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
       </ScrollArea>
 
       {/* Input */}
-      <form onSubmit={handleSubmit} className="p-2 border-t border-zinc-700">
+      <div className="p-2 border-t border-zinc-700 flex-shrink-0">
         <div className="flex gap-2">
           <span className="text-green-400 font-mono text-sm self-center font-semibold">$</span>
           <Input
@@ -318,7 +318,7 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
             className="flex-1 h-8 bg-transparent border-none text-zinc-300 font-mono text-sm focus:ring-0 focus:outline-none placeholder-zinc-500"
           />
         </div>
-      </form>
+      </div>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useCallback } from "react"
 import {
   ChevronRight,
   ChevronDown,
@@ -13,6 +13,13 @@ import {
   FolderPlus,
   Trash2,
   Edit3,
+  RefreshCw,
+  SortAsc,
+  Package,
+  Code,
+  ImageIcon,
+  FileCode,
+  Settings,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -33,6 +40,8 @@ interface FileExplorerProps {
   onFileSelect: (path: string) => void
   onCreateFile: (name: string) => void
   onCreateFolder: (name: string) => void
+  onDeleteFile?: (path: string) => void
+  onRefresh?: () => void
 }
 
 export default function FileExplorer({
@@ -41,77 +50,16 @@ export default function FileExplorer({
   onFileSelect,
   onCreateFile,
   onCreateFolder,
+  onDeleteFile,
+  onRefresh,
 }: FileExplorerProps) {
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["src"]))
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["src", "public"]))
   const [searchQuery, setSearchQuery] = useState("")
   const [newFileName, setNewFileName] = useState("")
   const [newFolderName, setNewFolderName] = useState("")
   const [isCreateFileOpen, setIsCreateFileOpen] = useState(false)
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false)
-
-  const defaultFiles: FileNode[] =
-    files.length > 0
-      ? files
-      : [
-          {
-            name: "src",
-            type: "folder",
-            path: "src",
-            children: [
-              { name: "App.jsx", type: "file", path: "src/App.jsx" },
-              { name: "main.jsx", type: "file", path: "src/main.jsx" },
-              {
-                name: "components",
-                type: "folder",
-                path: "src/components",
-                children: [
-                  { name: "Header.jsx", type: "file", path: "src/components/Header.jsx" },
-                  { name: "Footer.jsx", type: "file", path: "src/components/Footer.jsx" },
-                  {
-                    name: "ui",
-                    type: "folder",
-                    path: "src/components/ui",
-                    children: [
-                      { name: "Button.jsx", type: "file", path: "src/components/ui/Button.jsx" },
-                      { name: "Input.jsx", type: "file", path: "src/components/ui/Input.jsx" },
-                    ],
-                  },
-                ],
-              },
-              {
-                name: "styles",
-                type: "folder",
-                path: "src/styles",
-                children: [
-                  { name: "globals.css", type: "file", path: "src/styles/globals.css" },
-                  { name: "components.css", type: "file", path: "src/styles/components.css" },
-                ],
-              },
-              {
-                name: "utils",
-                type: "folder",
-                path: "src/utils",
-                children: [
-                  { name: "helpers.js", type: "file", path: "src/utils/helpers.js" },
-                  { name: "api.js", type: "file", path: "src/utils/api.js" },
-                ],
-              },
-            ],
-          },
-          {
-            name: "public",
-            type: "folder",
-            path: "public",
-            children: [
-              { name: "favicon.ico", type: "file", path: "public/favicon.ico" },
-              { name: "logo.svg", type: "file", path: "public/logo.svg" },
-            ],
-          },
-          { name: "package.json", type: "file", path: "package.json" },
-          { name: "vite.config.js", type: "file", path: "vite.config.js" },
-          { name: "index.html", type: "file", path: "index.html" },
-          { name: "README.md", type: "file", path: "README.md" },
-        ]
+  const [sortBy, setSortBy] = useState<"name" | "type">("name")
 
   const toggleFolder = (path: string) => {
     setExpandedFolders((prev) => {
@@ -126,28 +74,74 @@ export default function FileExplorer({
   }
 
   const getFileIcon = (node: FileNode) => {
-    if (node.type === "folder") {
-      return expandedFolders.has(node.path) ? (
-        <FolderOpen className="w-4 h-4 text-blue-400" />
+    if (node.type === "folder" || node.type === "directory") {
+      const isExpanded = expandedFolders.has(node.path)
+
+      // Special folder icons
+      if (node.name === "src")
+        return isExpanded ? (
+          <FolderOpen className="w-4 h-4 text-blue-400" />
+        ) : (
+          <Folder className="w-4 h-4 text-blue-400" />
+        )
+      if (node.name === "public")
+        return isExpanded ? (
+          <FolderOpen className="w-4 h-4 text-green-400" />
+        ) : (
+          <Folder className="w-4 h-4 text-green-400" />
+        )
+      if (node.name === "components")
+        return isExpanded ? (
+          <FolderOpen className="w-4 h-4 text-cyan-400" />
+        ) : (
+          <Folder className="w-4 h-4 text-cyan-400" />
+        )
+      if (node.name === "utils" || node.name === "lib")
+        return isExpanded ? (
+          <FolderOpen className="w-4 h-4 text-purple-400" />
+        ) : (
+          <Folder className="w-4 h-4 text-purple-400" />
+        )
+      if (node.name === "styles" || node.name === "css")
+        return isExpanded ? (
+          <FolderOpen className="w-4 h-4 text-pink-400" />
+        ) : (
+          <Folder className="w-4 h-4 text-pink-400" />
+        )
+
+      return isExpanded ? (
+        <FolderOpen className="w-4 h-4 text-yellow-400" />
       ) : (
-        <Folder className="w-4 h-4 text-blue-400" />
+        <Folder className="w-4 h-4 text-yellow-400" />
       )
     }
 
     const ext = node.name.split(".").pop()?.toLowerCase()
+    const fileName = node.name.toLowerCase()
+
+    // Special file icons
+    if (fileName === "package.json") return <Package className="w-4 h-4 text-green-500" />
+    if (fileName === "vite.config.ts" || fileName === "vite.config.js")
+      return <Settings className="w-4 h-4 text-purple-500" />
+    if (fileName === "tailwind.config.js" || fileName === "tailwind.config.ts")
+      return <Settings className="w-4 h-4 text-cyan-500" />
+    if (fileName === "tsconfig.json") return <Settings className="w-4 h-4 text-blue-500" />
+    if (fileName === "postcss.config.js") return <Settings className="w-4 h-4 text-orange-500" />
+
     switch (ext) {
       case "tsx":
+        return <FileCode className="w-4 h-4 text-cyan-400" />
       case "jsx":
-        return <FileText className="w-4 h-4 text-cyan-400" />
+        return <FileCode className="w-4 h-4 text-cyan-300" />
       case "ts":
-        return <FileText className="w-4 h-4 text-blue-400" />
+        return <FileCode className="w-4 h-4 text-blue-400" />
       case "js":
-        return <FileText className="w-4 h-4 text-yellow-400" />
+        return <FileCode className="w-4 h-4 text-yellow-400" />
       case "css":
-        return <FileText className="w-4 h-4 text-pink-400" />
+        return <Code className="w-4 h-4 text-pink-400" />
       case "scss":
       case "sass":
-        return <FileText className="w-4 h-4 text-pink-300" />
+        return <Code className="w-4 h-4 text-pink-300" />
       case "html":
         return <FileText className="w-4 h-4 text-orange-400" />
       case "json":
@@ -155,12 +149,15 @@ export default function FileExplorer({
       case "md":
         return <FileText className="w-4 h-4 text-gray-400" />
       case "svg":
-        return <FileText className="w-4 h-4 text-purple-400" />
+        return <ImageIcon className="w-4 h-4 text-purple-400" />
       case "png":
       case "jpg":
       case "jpeg":
       case "gif":
-        return <FileText className="w-4 h-4 text-indigo-400" />
+      case "webp":
+        return <ImageIcon className="w-4 h-4 text-indigo-400" />
+      case "ico":
+        return <ImageIcon className="w-4 h-4 text-gray-500" />
       default:
         return <FileText className="w-4 h-4 text-gray-400" />
     }
@@ -182,25 +179,59 @@ export default function FileExplorer({
     }
   }
 
-  const filteredFiles = (nodes: FileNode[]): FileNode[] => {
-    if (!searchQuery) return nodes
+  const handleDelete = useCallback(
+    (path: string) => {
+      if (onDeleteFile && confirm(`Are you sure you want to delete ${path}?`)) {
+        onDeleteFile(path)
+      }
+    },
+    [onDeleteFile],
+  )
 
-    return nodes.filter((node) => {
+  const handleRefresh = useCallback(() => {
+    if (onRefresh) {
+      onRefresh()
+    }
+  }, [onRefresh])
+
+  const handleCollapseAll = () => {
+    setExpandedFolders(new Set())
+  }
+
+  const sortFiles = (nodes: FileNode[]): FileNode[] => {
+    return [...nodes].sort((a, b) => {
+      if (sortBy === "type") {
+        // Folders first, then files
+        if (a.type !== b.type) {
+          return a.type === "directory" || a.type === "folder" ? -1 : 1
+        }
+      }
+      return a.name.localeCompare(b.name)
+    })
+  }
+
+  const filteredFiles = (nodes: FileNode[]): FileNode[] => {
+    if (!searchQuery) return sortFiles(nodes)
+
+    const filtered = nodes.filter((node) => {
       if (node.name.toLowerCase().includes(searchQuery.toLowerCase())) {
         return true
       }
-      if (node.type === "folder" && node.children) {
+      if ((node.type === "folder" || node.type === "directory") && node.children) {
         const filteredChildren = filteredFiles(node.children)
         return filteredChildren.length > 0
       }
       return false
     })
+
+    return sortFiles(filtered)
   }
 
   const renderFileNode = (node: FileNode, depth = 0) => {
     const isExpanded = expandedFolders.has(node.path)
     const isActive = activeFile === node.path
     const paddingLeft = depth * 16 + 8
+    const isFolder = node.type === "folder" || node.type === "directory"
 
     return (
       <div key={node.path}>
@@ -211,19 +242,19 @@ export default function FileExplorer({
           style={{ paddingLeft }}
           onClick={(e) => {
             e.stopPropagation()
-            if (node.type === "folder") {
+            if (isFolder) {
               toggleFolder(node.path)
             } else {
               onFileSelect(node.path)
             }
           }}
         >
-          {node.type === "folder" && (
+          {isFolder && (
             <div className="w-4 h-4 flex items-center justify-center">
               {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
             </div>
           )}
-          {node.type !== "folder" && <div className="w-4 h-4" />}
+          {!isFolder && <div className="w-4 h-4" />}
           {getFileIcon(node)}
           <span className="text-sm truncate flex-1">{node.name}</span>
 
@@ -239,7 +270,7 @@ export default function FileExplorer({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
-              {node.type === "folder" ? (
+              {isFolder ? (
                 <>
                   <DropdownMenuItem onClick={() => setIsCreateFileOpen(true)}>
                     <FilePlus className="w-4 h-4 mr-2" />
@@ -260,25 +291,27 @@ export default function FileExplorer({
                   <DropdownMenuSeparator />
                 </>
               )}
-              <DropdownMenuItem className="text-red-400">
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete
-              </DropdownMenuItem>
+              {onDeleteFile && (
+                <DropdownMenuItem className="text-red-400 focus:text-red-400" onClick={() => handleDelete(node.path)}>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
 
-        {node.type === "folder" && isExpanded && node.children && node.children.length > 0 && (
-          <div>{node.children.map((child) => renderFileNode(child, depth + 1))}</div>
+        {isFolder && isExpanded && node.children && node.children.length > 0 && (
+          <div>{sortFiles(node.children).map((child) => renderFileNode(child, depth + 1))}</div>
         )}
       </div>
     )
   }
 
-  const fileCount = defaultFiles.reduce((count, node) => {
+  const fileCount = files.reduce((count, node) => {
     const countFiles = (n: FileNode): number => {
       if (n.type === "file") return 1
-      if (n.type === "folder" && n.children) {
+      if ((n.type === "folder" || n.type === "directory") && n.children) {
         return n.children.reduce((acc, child) => acc + countFiles(child), 0)
       }
       return 0
@@ -295,7 +328,12 @@ export default function FileExplorer({
           <div className="flex gap-1">
             <Dialog open={isCreateFileOpen} onOpenChange={setIsCreateFileOpen}>
               <DialogTrigger asChild>
-                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-zinc-400 hover:text-white">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0 text-zinc-400 hover:text-white"
+                  title="New File"
+                >
                   <FilePlus className="w-3 h-3" />
                 </Button>
               </DialogTrigger>
@@ -305,13 +343,14 @@ export default function FileExplorer({
                 </DialogHeader>
                 <div className="space-y-4">
                   <Input
-                    placeholder="Enter file name (e.g., component.jsx)"
+                    placeholder="Enter file name (e.g., Component.tsx)"
                     value={newFileName}
                     onChange={(e) => setNewFileName(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleCreateFile()}
+                    autoFocus
                   />
                   <div className="flex gap-2">
-                    <Button onClick={handleCreateFile} className="flex-1">
+                    <Button onClick={handleCreateFile} className="flex-1" disabled={!newFileName.trim()}>
                       Create File
                     </Button>
                     <Button variant="outline" onClick={() => setIsCreateFileOpen(false)}>
@@ -324,7 +363,12 @@ export default function FileExplorer({
 
             <Dialog open={isCreateFolderOpen} onOpenChange={setIsCreateFolderOpen}>
               <DialogTrigger asChild>
-                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-zinc-400 hover:text-white">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0 text-zinc-400 hover:text-white"
+                  title="New Folder"
+                >
                   <FolderPlus className="w-3 h-3" />
                 </Button>
               </DialogTrigger>
@@ -338,9 +382,10 @@ export default function FileExplorer({
                     value={newFolderName}
                     onChange={(e) => setNewFolderName(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleCreateFolder()}
+                    autoFocus
                   />
                   <div className="flex gap-2">
-                    <Button onClick={handleCreateFolder} className="flex-1">
+                    <Button onClick={handleCreateFolder} className="flex-1" disabled={!newFolderName.trim()}>
                       Create Folder
                     </Button>
                     <Button variant="outline" onClick={() => setIsCreateFolderOpen(false)}>
@@ -353,16 +398,35 @@ export default function FileExplorer({
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="sm" variant="ghost" className="h-6 w-6 p-0 text-zinc-400 hover:text-white">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 w-6 p-0 text-zinc-400 hover:text-white"
+                  title="More Options"
+                >
                   <MoreHorizontal className="w-3 h-3" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem>Collapse All</DropdownMenuItem>
-                <DropdownMenuItem>Refresh</DropdownMenuItem>
+                <DropdownMenuItem onClick={handleCollapseAll}>
+                  <ChevronRight className="w-4 h-4 mr-2" />
+                  Collapse All
+                </DropdownMenuItem>
+                {onRefresh && (
+                  <DropdownMenuItem onClick={handleRefresh}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Refresh
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>Sort by Name</DropdownMenuItem>
-                <DropdownMenuItem>Sort by Type</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSortBy("name")}>
+                  <SortAsc className="w-4 h-4 mr-2" />
+                  Sort by Name {sortBy === "name" && "✓"}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSortBy("type")}>
+                  <Folder className="w-4 h-4 mr-2" />
+                  Sort by Type {sortBy === "type" && "✓"}
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -382,14 +446,24 @@ export default function FileExplorer({
 
       {/* File Tree */}
       <ScrollArea className="flex-1">
-        <div className="py-2">{filteredFiles(defaultFiles).map((node) => renderFileNode(node))}</div>
+        <div className="py-2">
+          {files.length > 0 ? (
+            filteredFiles(files).map((node) => renderFileNode(node))
+          ) : (
+            <div className="p-4 text-center text-zinc-500">
+              <Folder className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No files found</p>
+              <p className="text-xs mt-1">Files will appear here once loaded</p>
+            </div>
+          )}
+        </div>
       </ScrollArea>
 
       {/* Stats */}
       <div className="p-2 border-t border-zinc-800 text-xs text-zinc-500">
         <div className="flex justify-between">
           <span>{fileCount} files</span>
-          <span>v0 Clone</span>
+          <span>Algorand Project</span>
         </div>
       </div>
     </div>

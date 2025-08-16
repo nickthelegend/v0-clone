@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useCallback, useMemo, useEffect } from "react"
+import { useState, useCallback, useEffect } from "react"
 import ChatInterface from "@/components/chat-interface"
 import CodeEditor from "@/components/code-editor"
 import FileExplorer from "@/components/file-explorer"
@@ -9,7 +9,7 @@ import PreviewPanel from "@/components/preview-panel"
 import ResizablePanels from "@/components/layout/resizable-panels"
 import Header from "@/components/layout/header"
 import type { ProjectState } from "@/lib/types"
-import { WebContainerService } from "@/lib/webcontainer"
+import { GitHubRepositoryFetcher, convertGitHubFilesToFileNodes } from "@/lib/github-fetcher"
 
 export default function Home() {
   const [projectState, setProjectState] = useState<ProjectState>({
@@ -26,72 +26,74 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"code" | "preview">("code")
   const [fileContents, setFileContents] = useState<Record<string, string>>({})
 
-  const webcontainerRef = useRef<WebContainerService | null>(null)
-
-  const webcontainer = useMemo(() => {
-    if (!webcontainerRef.current) {
-      webcontainerRef.current = WebContainerService.getInstance()
-    }
-    return webcontainerRef.current
-  }, [])
-
-  const fileUpdateTimeoutRef = useRef<NodeJS.Timeout>()
-
-  const refreshFileTree = useCallback(async () => {
+  const refreshFiles = useCallback(async () => {
     try {
-      const tree = await webcontainer.getFileTree()
-      const files = convertTreeToFileNodes(tree)
+      console.log("[v0] Refreshing files from GitHub...")
+      const repositoryFiles = await GitHubRepositoryFetcher.fetchRepositoryStructure()
+      const files = convertGitHubFilesToFileNodes(repositoryFiles)
+
       setProjectState((prev) => ({ ...prev, files }))
+      setFileContents(repositoryFiles)
+
+      console.log("[v0] Files refreshed and synced successfully")
     } catch (error) {
-      console.error("[v0] Failed to refresh file tree:", error)
+      console.error("[v0] Failed to refresh files:", error)
     }
-  }, [webcontainer])
-
-  const convertTreeToFileNodes = (tree: any, basePath = ""): any[] => {
-    const nodes: any[] = []
-
-    for (const [name, entry] of Object.entries(tree)) {
-      const fullPath = basePath ? `${basePath}/${name}` : name
-
-      if ((entry as any).type === "directory") {
-        nodes.push({
-          name,
-          path: fullPath,
-          type: "directory",
-          children: convertTreeToFileNodes((entry as any).children, fullPath),
-        })
-      } else {
-        nodes.push({
-          name,
-          path: fullPath,
-          type: "file",
-        })
-      }
-    }
-
-    return nodes
-  }
+  }, [])
 
   useEffect(() => {
     const initializeProject = async () => {
       try {
-        await webcontainer.boot()
-        await refreshFileTree()
+        console.log("[v0] Loading Algorand repository from GitHub...")
+
+        const repositoryFiles = await GitHubRepositoryFetcher.fetchRepositoryStructure()
+        const files = convertGitHubFilesToFileNodes(repositoryFiles)
+
+        setProjectState((prev) => ({ ...prev, files }))
+        setFileContents(repositoryFiles)
+
+        // Set active file to App.tsx or index.html if available
+        const defaultFile = repositoryFiles["src/App.tsx"]
+          ? "src/App.tsx"
+          : repositoryFiles["index.html"]
+            ? "index.html"
+            : Object.keys(repositoryFiles)[0]
+
+        if (defaultFile) {
+          setProjectState((prev) => ({ ...prev, activeFile: defaultFile }))
+        }
+
+        console.log("[v0] Algorand repository loaded successfully")
       } catch (error) {
         console.error("[v0] Failed to initialize project:", error)
+
+        setProjectState((prev) => ({
+          ...prev,
+          terminal: {
+            ...prev.terminal,
+            history: [
+              {
+                id: Date.now().toString(),
+                type: "error" as const,
+                content: `❌ Failed to load Algorand repository: ${error.message}`,
+                timestamp: new Date(),
+              },
+            ],
+          },
+        }))
       }
     }
 
     initializeProject()
-  }, [webcontainer, refreshFileTree])
+  }, [])
 
   const handleCodeGenerated = useCallback(
     async (code: string, filename: string) => {
       console.log("[v0] Generated code:", { code, filename })
 
       try {
-        // Determine the correct path based on file type
         let filePath = filename
+
         if (!filename.includes("/")) {
           if (
             filename.endsWith(".jsx") ||
@@ -99,66 +101,101 @@ export default function Home() {
             filename.endsWith(".js") ||
             filename.endsWith(".ts")
           ) {
+            if (
+              code.includes("export default") &&
+              (code.includes("function") || code.includes("const") || code.includes("class"))
+            ) {
+              filePath = `src/components/${filename}`
+            } else {
+              filePath = `src/${filename}`
+            }
+          } else if (filename.endsWith(".css") || filename.endsWith(".scss")) {
+            filePath = `src/styles/${filename}`
+          } else if (filename.endsWith(".json")) {
+            filePath = filename
+          } else {
             filePath = `src/${filename}`
           }
         }
 
-        // Write the generated code to WebContainer
-        await webcontainer.writeFile(filePath, code)
+        // Update file contents
         setFileContents((prev) => ({ ...prev, [filePath]: code }))
-        await refreshFileTree()
+
+        try {
+          const { WebContainerService } = await import("@/lib/webcontainer")
+          const webcontainer = WebContainerService.getInstance()
+          await webcontainer.writeFile(filePath, code)
+          console.log(`[v0] File synced to WebContainer: ${filePath}`)
+        } catch (error) {
+          console.warn(`[v0] Failed to sync file to WebContainer: ${error}`)
+        }
+
+        // Update file tree if it's a new file
+        if (!fileContents[filePath]) {
+          const updatedFiles = { ...fileContents, [filePath]: code }
+          const files = convertGitHubFilesToFileNodes(updatedFiles)
+          setProjectState((prev) => ({ ...prev, files }))
+        }
 
         setProjectState((prev) => ({
           ...prev,
           activeFile: filePath,
+          terminal: {
+            ...prev.terminal,
+            history: [
+              ...prev.terminal.history,
+              {
+                id: Date.now().toString(),
+                type: "success" as const,
+                content: `✅ Generated and applied: ${filePath}`,
+                timestamp: new Date(),
+              },
+            ],
+          },
         }))
 
         console.log(`[v0] Code applied to ${filePath}`)
       } catch (error) {
         console.error("[v0] Failed to write generated code:", error)
+
+        setProjectState((prev) => ({
+          ...prev,
+          terminal: {
+            ...prev.terminal,
+            history: [
+              ...prev.terminal.history,
+              {
+                id: Date.now().toString(),
+                type: "error" as const,
+                content: `❌ Failed to apply code to ${filename}: ${error.message}`,
+                timestamp: new Date(),
+              },
+            ],
+          },
+        }))
       }
     },
-    [webcontainer, refreshFileTree],
+    [fileContents],
   )
 
-  const handleFileSelect = useCallback(
-    async (path: string) => {
-      setProjectState((prev) => ({ ...prev, activeFile: path }))
+  const handleFileSelect = useCallback(async (path: string) => {
+    setProjectState((prev) => ({ ...prev, activeFile: path }))
+  }, [])
 
-      if (!fileContents[path]) {
-        try {
-          const content = await webcontainer.readFile(path)
-          setFileContents((prev) => ({ ...prev, [path]: content }))
-        } catch (error) {
-          console.error(`[v0] Failed to load file ${path}:`, error)
-        }
-      }
-    },
-    [webcontainer, fileContents],
-  )
+  const handleFileChange = useCallback(async (path: string, content: string) => {
+    console.log("[v0] File changed:", { path, content: content.substring(0, 100) + "..." })
 
-  const handleFileChange = useCallback(
-    async (path: string, content: string) => {
-      console.log("[v0] File changed:", { path, content: content.substring(0, 100) + "..." })
+    setFileContents((prev) => ({ ...prev, [path]: content }))
 
-      // Clear existing timeout
-      if (fileUpdateTimeoutRef.current) {
-        clearTimeout(fileUpdateTimeoutRef.current)
-      }
-
-      // Debounce file updates to prevent excessive WebContainer writes
-      fileUpdateTimeoutRef.current = setTimeout(async () => {
-        try {
-          await webcontainer.writeFile(path, content)
-          // Update file contents state
-          setFileContents((prev) => ({ ...prev, [path]: content }))
-        } catch (error) {
-          console.error("[v0] Failed to save file changes:", error)
-        }
-      }, 500)
-    },
-    [webcontainer],
-  )
+    try {
+      const { WebContainerService } = await import("@/lib/webcontainer")
+      const webcontainer = WebContainerService.getInstance()
+      await webcontainer.writeFile(path, content)
+      console.log(`[v0] File change synced to WebContainer: ${path}`)
+    } catch (error) {
+      console.warn(`[v0] Failed to sync file change to WebContainer: ${error}`)
+    }
+  }, [])
 
   const handleFileClose = useCallback((path: string) => {
     setProjectState((prev) => ({
@@ -178,46 +215,181 @@ export default function Home() {
             ? `import React from 'react'\n\nexport default function ${name.split(".")[0]}() {\n  return (\n    <div>\n      <h1>New Component</h1>\n    </div>\n  )\n}`
             : ""
 
-        await webcontainer.writeFile(filePath, defaultContent)
         setFileContents((prev) => ({ ...prev, [filePath]: defaultContent }))
-        await refreshFileTree()
-        setProjectState((prev) => ({ ...prev, activeFile: filePath }))
+        const updatedFiles = { ...fileContents, [filePath]: defaultContent }
+        const files = convertGitHubFilesToFileNodes(updatedFiles)
+        setProjectState((prev) => ({ ...prev, files, activeFile: filePath }))
       } catch (error) {
         console.error("[v0] Failed to create file:", error)
       }
     },
-    [webcontainer, refreshFileTree],
+    [fileContents],
   )
 
-  const handleCreateFolder = useCallback(async (name: string) => {
-    console.log("[v0] Creating folder:", name)
-    // WebContainer will create folders automatically when files are written to them
-  }, [])
+  const handleCreateFolder = useCallback(
+    async (name: string) => {
+      console.log("[v0] Creating folder:", name)
+      try {
+        const placeholderPath = `src/${name}/.gitkeep`
+        setFileContents((prev) => ({ ...prev, [placeholderPath]: "" }))
+        const updatedFiles = { ...fileContents, [placeholderPath]: "" }
+        const files = convertGitHubFilesToFileNodes(updatedFiles)
+        setProjectState((prev) => ({ ...prev, files }))
+      } catch (error) {
+        console.error("[v0] Failed to create folder:", error)
+      }
+    },
+    [fileContents],
+  )
+
+  const handleDeleteFile = useCallback(
+    async (path: string) => {
+      try {
+        console.log("[v0] Delete file requested:", path)
+
+        setFileContents((prev) => {
+          const newContents = { ...prev }
+          delete newContents[path]
+          return newContents
+        })
+
+        if (projectState.activeFile === path) {
+          setProjectState((prev) => ({ ...prev, activeFile: null }))
+        }
+
+        const updatedFiles = { ...fileContents }
+        delete updatedFiles[path]
+        const files = convertGitHubFilesToFileNodes(updatedFiles)
+        setProjectState((prev) => ({ ...prev, files }))
+      } catch (error) {
+        console.error("[v0] Failed to delete file:", error)
+      }
+    },
+    [projectState.activeFile, fileContents],
+  )
 
   const handleRun = useCallback(async () => {
     if (isLoading || projectState.isRunning) return
 
-    setProjectState((prev) => ({ ...prev, isRunning: true }))
     setIsLoading(true)
 
+    setProjectState((prev) => ({
+      ...prev,
+      isRunning: true,
+      terminal: {
+        ...prev.terminal,
+        history: [
+          ...prev.terminal.history,
+          {
+            id: Date.now().toString(),
+            type: "info" as const,
+            content: "📦 Installing dependencies...",
+            timestamp: new Date(),
+          },
+        ],
+      },
+    }))
+
     try {
-      console.log("[v0] Starting project...")
+      const { WebContainerService } = await import("@/lib/webcontainer")
+      const webcontainer = WebContainerService.getInstance()
+
+      // Install dependencies first
       await webcontainer.installDependencies()
-      const url = await webcontainer.startDevServer()
-      setPreviewUrl(url)
-      console.log("[v0] Project started at:", url)
+
+      setProjectState((prev) => ({
+        ...prev,
+        terminal: {
+          ...prev.terminal,
+          history: [
+            ...prev.terminal.history,
+            {
+              id: (Date.now() + 1).toString(),
+              type: "success" as const,
+              content: "✅ Dependencies installed successfully!",
+              timestamp: new Date(),
+            },
+            {
+              id: (Date.now() + 2).toString(),
+              type: "info" as const,
+              content: "🚀 Starting development server...",
+              timestamp: new Date(),
+            },
+          ],
+        },
+      }))
+
+      // Start dev server and get WebContainer URL
+      const serverUrl = await webcontainer.startDevServer()
+
+      setProjectState((prev) => ({
+        ...prev,
+        terminal: {
+          ...prev.terminal,
+          history: [
+            ...prev.terminal.history,
+            {
+              id: (Date.now() + 3).toString(),
+              type: "success" as const,
+              content: `✅ Development server started at: ${serverUrl}`,
+              timestamp: new Date(),
+            },
+          ],
+        },
+      }))
+
+      setPreviewUrl(serverUrl)
+      setIsLoading(false)
     } catch (error) {
-      console.error("[v0] Failed to start project:", error)
-      setProjectState((prev) => ({ ...prev, isRunning: false }))
-    } finally {
+      console.error("[v0] Failed to start dev server:", error)
+
+      setProjectState((prev) => ({
+        ...prev,
+        isRunning: false,
+        terminal: {
+          ...prev.terminal,
+          history: [
+            ...prev.terminal.history,
+            {
+              id: (Date.now() + 4).toString(),
+              type: "error" as const,
+              content: `❌ Failed to start server: ${error.message}`,
+              timestamp: new Date(),
+            },
+          ],
+        },
+      }))
+
       setIsLoading(false)
     }
-  }, [webcontainer, isLoading, projectState.isRunning])
+  }, [isLoading, projectState.isRunning])
 
-  const handleStop = useCallback(() => {
-    setProjectState((prev) => ({ ...prev, isRunning: false }))
+  const handleStop = useCallback(async () => {
+    try {
+      const { WebContainerService } = await import("@/lib/webcontainer")
+      const webcontainer = WebContainerService.getInstance()
+      await webcontainer.stopDevServer()
+    } catch (error) {
+      console.error("[v0] Failed to stop server:", error)
+    }
+
+    setProjectState((prev) => ({
+      ...prev,
+      isRunning: false,
+      terminal: {
+        ...prev.terminal,
+        history: [
+          ...prev.terminal.history,
+          {
+            id: Date.now().toString(),
+            type: "info" as const,
+            content: "🛑 Development session ended",
+            timestamp: new Date(),
+          },
+        ],
+      },
+    }))
     setPreviewUrl(undefined)
-    console.log("[v0] Stopping project...")
   }, [])
 
   const handleToggleTerminal = useCallback(() => {
@@ -264,6 +436,8 @@ export default function Home() {
                 onFileSelect={handleFileSelect}
                 onCreateFile={handleCreateFile}
                 onCreateFolder={handleCreateFolder}
+                onDeleteFile={handleDeleteFile}
+                onRefresh={refreshFiles}
               />
             </div>
             <div className="flex-1">
@@ -279,7 +453,12 @@ export default function Home() {
           </>
         ) : (
           <div className="flex-1">
-            <PreviewPanel url={previewUrl} isLoading={isLoading} />
+            <PreviewPanel
+              url={previewUrl}
+              isLoading={isLoading}
+              fileContents={fileContents}
+              activeFile={projectState.activeFile}
+            />
           </div>
         )}
       </div>
