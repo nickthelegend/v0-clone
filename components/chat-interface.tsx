@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button"
 import { User, Bot, Copy, Check, Play, FileText } from "lucide-react"
 import type { Message } from "@/lib/types"
 import ChatInput from "./chat-input"
+import ReactMarkdown from "react-markdown"
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism"
 
 interface ChatInterfaceProps {
   onCodeGenerated?: (code: string, filename: string) => void
@@ -48,23 +51,6 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
     return () => clearTimeout(timeoutId)
   }, [messages, isLoading])
 
-  const extractCodeBlocks = (content: string): CodeBlock[] => {
-    const codeBlockRegex = /```(\w+)?\s*(?:file="([^"]+)")?\n([\s\S]*?)```/g
-    const blocks: CodeBlock[] = []
-    let match
-
-    while ((match = codeBlockRegex.exec(content)) !== null) {
-      const [, language = "javascript", filename, code] = match
-      blocks.push({
-        language,
-        code: code.trim(),
-        filename: filename || `generated.${language === "tsx" ? "tsx" : language === "typescript" ? "ts" : "js"}`,
-      })
-    }
-
-    return blocks
-  }
-
   const handleCopyCode = async (code: string, blockId: string) => {
     try {
       await navigator.clipboard.writeText(code)
@@ -88,70 +74,106 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
   }
 
   const renderMessageContent = (content: string, messageId: string) => {
-    const codeBlocks = extractCodeBlocks(content)
+    return (
+      <ReactMarkdown
+        // className="prose prose-invert prose-sm max-w-none"
+        components={{
+          code({ node, inline, className, children, ...props }) {
+            const match = /language-(\w+)/.exec(className || "")
+            const language = match ? match[1] : ""
+            const codeString = String(children).replace(/\n$/, "")
 
-    if (codeBlocks.length === 0) {
-      return <div className="text-sm text-zinc-300 whitespace-pre-wrap break-words">{content}</div>
-    }
+            if (!inline && language) {
+              const blockId = `${messageId}-${language}-${Math.random()}`
+              const isCopied = copiedBlocks.has(blockId)
 
-    const parts = content.split(/```[\s\S]*?```/)
-    const result = []
-    let codeBlockIndex = 0
+              // Extract filename from code comment if present
+              const filenameMatch = codeString.match(/^\/\/ file: (.+)$/m)
+              const filename = filenameMatch ? filenameMatch[1] : `code.${language}`
 
-    for (let i = 0; i < parts.length; i++) {
-      if (parts[i].trim()) {
-        result.push(
-          <div key={`text-${i}`} className="text-sm text-zinc-300 whitespace-pre-wrap break-words mb-4">
-            {parts[i].trim()}
-          </div>,
-        )
-      }
-
-      if (codeBlockIndex < codeBlocks.length) {
-        const block = codeBlocks[codeBlockIndex]
-        const blockId = `${messageId}-${codeBlockIndex}`
-        const isCopied = copiedBlocks.has(blockId)
-
-        result.push(
-          <div key={`code-${codeBlockIndex}`} className="mb-4">
-            <div className="bg-zinc-800 rounded-lg overflow-hidden border border-zinc-700">
-              <div className="flex items-center justify-between px-4 py-2 bg-zinc-700 border-b border-zinc-600">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-zinc-400" />
-                  <span className="text-sm text-zinc-300">{block.filename}</span>
-                  <span className="text-xs text-zinc-500 bg-zinc-600 px-2 py-1 rounded">{block.language}</span>
+              return (
+                <div className="mb-4">
+                  <div className="bg-zinc-800 rounded-lg overflow-hidden border border-zinc-700">
+                    <div className="flex items-center justify-between px-4 py-2 bg-zinc-700 border-b border-zinc-600">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-zinc-400" />
+                        <span className="text-sm text-zinc-300">{filename}</span>
+                        <span className="text-xs text-zinc-500 bg-zinc-600 px-2 py-1 rounded">{language}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleCopyCode(codeString, blockId)}
+                          className="h-7 text-zinc-400 hover:text-white"
+                        >
+                          {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                          {isCopied ? "Copied" : "Copy"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleApplyCode(codeString, filename)}
+                          className="h-7 bg-blue-600 hover:bg-blue-700"
+                        >
+                          <Play className="w-3 h-3 mr-1" />
+                          Apply
+                        </Button>
+                      </div>
+                    </div>
+                    <SyntaxHighlighter
+                      style={oneDark}
+                      language={language}
+                      PreTag="div"
+                      className="!m-0 !bg-transparent"
+                      customStyle={{
+                        margin: 0,
+                        padding: "1rem",
+                        background: "transparent",
+                        fontSize: "0.875rem",
+                      }}
+                    >
+                      {codeString}
+                    </SyntaxHighlighter>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleCopyCode(block.code, blockId)}
-                    className="h-7 text-zinc-400 hover:text-white"
-                  >
-                    {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                    {isCopied ? "Copied" : "Copy"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => handleApplyCode(block.code, block.filename)}
-                    className="h-7 bg-blue-600 hover:bg-blue-700"
-                  >
-                    <Play className="w-3 h-3 mr-1" />
-                    Apply
-                  </Button>
-                </div>
-              </div>
-              <pre className="p-4 text-sm text-zinc-300 overflow-x-auto">
-                <code>{block.code}</code>
-              </pre>
-            </div>
-          </div>,
-        )
-        codeBlockIndex++
-      }
-    }
+              )
+            }
 
-    return <div>{result}</div>
+            return (
+              <code className="bg-zinc-800 px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
+                {children}
+              </code>
+            )
+          },
+          h1: ({ children }) => <h1 className="text-xl font-bold text-zinc-100 mb-4">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-lg font-semibold text-zinc-200 mb-3">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-base font-medium text-zinc-200 mb-2">{children}</h3>,
+          p: ({ children }) => <p className="text-sm text-zinc-300 mb-3 leading-relaxed">{children}</p>,
+          ul: ({ children }) => (
+            <ul className="list-disc list-inside text-sm text-zinc-300 mb-3 space-y-1">{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="list-decimal list-inside text-sm text-zinc-300 mb-3 space-y-1">{children}</ol>
+          ),
+          li: ({ children }) => <li className="text-zinc-300">{children}</li>,
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-4 border-zinc-600 pl-4 italic text-zinc-400 mb-3">{children}</blockquote>
+          ),
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              className="text-blue-400 hover:text-blue-300 underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    )
   }
 
   const handleSubmit = async (input: string, agent: string) => {
@@ -211,11 +233,11 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
       console.log("[v0] Final assistant content:", assistantContent)
 
       // Auto-apply code blocks if there's only one
-      const codeBlocks = extractCodeBlocks(assistantContent)
-      if (codeBlocks.length === 1 && onCodeGenerated) {
+      const codeBlocks = assistantContent.match(/```(\w+)?\s*(?:file="([^"]+)")?\n([\s\S]*?)```/g)
+      if (codeBlocks && codeBlocks.length === 1 && onCodeGenerated) {
         const block = codeBlocks[0]
         setTimeout(() => {
-          onCodeGenerated(block.code, block.filename)
+          onCodeGenerated(block, "generated.tsx")
         }, 1000)
       }
     } catch (error) {
@@ -234,14 +256,7 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
     }
   }
 
-  // const quickPrompts = [
-  //   "Create a React component for a todo list",
-  //   "Build a responsive navbar with Tailwind CSS",
-  //   "Generate a contact form with validation",
-  //   "Create a dashboard layout with sidebar",
-  //   "Build a product card component",
-  //   "Generate API endpoints for user management",
-  // ]
+
 
   return (
     <div className="flex flex-col h-full max-h-full bg-zinc-900 border-r border-zinc-800 overflow-hidden">
