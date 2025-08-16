@@ -14,6 +14,7 @@ export async function POST(req: Request) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages }),
       })
+
       if (!webAgentResponse.ok) {
         throw new Error("Web Agent request failed")
       }
@@ -27,22 +28,22 @@ export async function POST(req: Request) {
     }
 
     if (agent === "Github Agent") {
-      const result = await streamText({
-        model: mistral("mistral-large-latest"),
-        messages,
-        system: `You are a GitHub Agent specialized in helping with GitHub-related tasks, repository management, and Git workflows.
-
-When responding:
-- Focus on GitHub best practices
-- Provide Git commands and workflows
-- Help with repository setup and management
-- Assist with GitHub Actions and CI/CD
-- Guide on collaboration and pull request workflows
-
-Format your responses with clear explanations and code examples.`,
+      const githubAgentResponse = await fetch(new URL("/api/github-agent", req.url), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: messages[messages.length - 1]?.content || "" }),
       })
 
-      return result.toTextStreamResponse()
+      if (!githubAgentResponse.ok) {
+        throw new Error("GitHub Agent request failed")
+      }
+
+      const githubAgentResult = await githubAgentResponse.text()
+
+      // Return as plain text stream
+      return new Response(githubAgentResult, {
+        headers: { "Content-Type": "text/plain" },
+      })
     }
 
     // Default agent behavior

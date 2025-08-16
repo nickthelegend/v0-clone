@@ -279,10 +279,10 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
 
   return (
     <div className="flex flex-col h-full max-h-full bg-zinc-900 border-r border-zinc-800 overflow-hidden">
-      <div className="p-4 border-b border-zinc-800 flex-shrink-0">
+      {/* <div className="p-4 border-b border-zinc-800 flex-shrink-0">
         <h2 className="text-lg font-semibold text-white">AI Assistant</h2>
         <p className="text-sm text-zinc-400">Powered by Mistral AI</p>
-      </div>
+      </div> */}
 
      
 
