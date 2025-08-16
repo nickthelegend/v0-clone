@@ -95,7 +95,7 @@ export default function Home() {
         try {
           const { WebContainerService } = await import("@/lib/webcontainer")
           const webcontainer = WebContainerService.getInstance()
-          await webcontainer.mountStaticFiles(algorandBoltFileTree)
+          await webcontainer.mountFiles(algorandBoltFileTree)
           console.log("[v0] Files mounted to WebContainer successfully")
         } catch (error) {
           console.warn("[v0] Failed to mount files to WebContainer:", error)
