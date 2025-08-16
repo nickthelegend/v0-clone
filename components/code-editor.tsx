@@ -4,8 +4,9 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import Editor from "@monaco-editor/react"
-import { X, FileText } from "lucide-react"
+import { X, FileText, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import type { FileNode } from "@/lib/types"
 
 interface CodeEditorProps {
@@ -15,6 +16,7 @@ interface CodeEditorProps {
   onFileChange: (path: string, content: string) => void
   onFileClose: (path: string) => void
   fileContents?: Record<string, string>
+  isLoading?: boolean
 }
 
 export default function CodeEditor({
@@ -24,6 +26,7 @@ export default function CodeEditor({
   onFileChange,
   onFileClose,
   fileContents = {},
+  isLoading = false,
 }: CodeEditorProps) {
   const [openTabs, setOpenTabs] = useState<string[]>([])
 
@@ -92,6 +95,39 @@ export default function App() {
   const getFileIcon = (path: string) => {
     const ext = path.split(".").pop()
     return <FileText className="w-4 h-4" />
+  }
+
+  const LoadingSkeleton = () => (
+    <div className="h-full flex flex-col bg-zinc-900">
+      {/* Tabs skeleton */}
+      <div className="flex bg-zinc-800 border-b border-zinc-700 p-2 gap-2">
+        <Skeleton className="h-8 w-24" />
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-8 w-20" />
+      </div>
+
+      {/* Editor skeleton */}
+      <div className="flex-1 p-4 space-y-3">
+        <div className="flex items-center gap-2 mb-4">
+          <Loader2 className="w-4 h-4 animate-spin text-zinc-400" />
+          <span className="text-sm text-zinc-400">Loading editor...</span>
+        </div>
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-1/2" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-2/3" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-4 w-1/3" />
+        <Skeleton className="h-4 w-full" />
+      </div>
+    </div>
+  )
+
+  if (isLoading) {
+    return <LoadingSkeleton />
   }
 
   return (

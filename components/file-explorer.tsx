@@ -20,10 +20,12 @@ import {
   ImageIcon,
   FileCode,
   Settings,
+  Loader2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,6 +44,7 @@ interface FileExplorerProps {
   onCreateFolder: (name: string) => void
   onDeleteFile?: (path: string) => void
   onRefresh?: () => void
+  isLoading?: boolean
 }
 
 export default function FileExplorer({
@@ -52,6 +55,7 @@ export default function FileExplorer({
   onCreateFolder,
   onDeleteFile,
   onRefresh,
+  isLoading = false,
 }: FileExplorerProps) {
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set(["src", "public"]))
   const [searchQuery, setSearchQuery] = useState("")
@@ -319,6 +323,43 @@ export default function FileExplorer({
     return count + countFiles(node)
   }, 0)
 
+  const LoadingSkeleton = () => (
+    <div className="p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-4 w-4" />
+        <Skeleton className="h-4 w-24" />
+      </div>
+      <div className="pl-6 space-y-2">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-4 w-4" />
+          <Skeleton className="h-4 w-20" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-4 w-4" />
+          <Skeleton className="h-4 w-16" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-4 w-4" />
+          <Skeleton className="h-4 w-28" />
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-4 w-4" />
+        <Skeleton className="h-4 w-20" />
+      </div>
+      <div className="pl-6 space-y-2">
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-4 w-4" />
+          <Skeleton className="h-4 w-24" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-4 w-4" />
+          <Skeleton className="h-4 w-18" />
+        </div>
+      </div>
+    </div>
+  )
+
   return (
     <div className="h-full bg-zinc-900 border-r border-zinc-800 flex flex-col">
       {/* Header */}
@@ -326,6 +367,8 @@ export default function FileExplorer({
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium text-white">Explorer</h3>
           <div className="flex gap-1">
+            {isLoading && onRefresh && <Loader2 className="w-3 h-3 text-zinc-400 animate-spin" />}
+
             <Dialog open={isCreateFileOpen} onOpenChange={setIsCreateFileOpen}>
               <DialogTrigger asChild>
                 <Button
@@ -333,6 +376,7 @@ export default function FileExplorer({
                   variant="ghost"
                   className="h-6 w-6 p-0 text-zinc-400 hover:text-white"
                   title="New File"
+                  disabled={isLoading}
                 >
                   <FilePlus className="w-3 h-3" />
                 </Button>
@@ -368,6 +412,7 @@ export default function FileExplorer({
                   variant="ghost"
                   className="h-6 w-6 p-0 text-zinc-400 hover:text-white"
                   title="New Folder"
+                  disabled={isLoading}
                 >
                   <FolderPlus className="w-3 h-3" />
                 </Button>
@@ -403,6 +448,7 @@ export default function FileExplorer({
                   variant="ghost"
                   className="h-6 w-6 p-0 text-zinc-400 hover:text-white"
                   title="More Options"
+                  disabled={isLoading}
                 >
                   <MoreHorizontal className="w-3 h-3" />
                 </Button>
@@ -440,6 +486,7 @@ export default function FileExplorer({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-7 pl-7 text-xs bg-zinc-800 border-zinc-700 text-white placeholder-zinc-400"
+            disabled={isLoading}
           />
         </div>
       </div>
@@ -447,7 +494,9 @@ export default function FileExplorer({
       {/* File Tree */}
       <ScrollArea className="flex-1">
         <div className="py-2">
-          {files.length > 0 ? (
+          {isLoading ? (
+            <LoadingSkeleton />
+          ) : files.length > 0 ? (
             filteredFiles(files).map((node) => renderFileNode(node))
           ) : (
             <div className="p-4 text-center text-zinc-500">
@@ -462,7 +511,7 @@ export default function FileExplorer({
       {/* Stats */}
       <div className="p-2 border-t border-zinc-800 text-xs text-zinc-500">
         <div className="flex justify-between">
-          <span>{fileCount} files</span>
+          <span>{isLoading ? "Loading..." : `${fileCount} files`}</span>
           <span>Algorand Project</span>
         </div>
       </div>

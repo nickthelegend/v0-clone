@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
-import { Square, Trash2, TerminalIcon } from "lucide-react"
+import { Square, Trash2, TerminalIcon, GripHorizontal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -19,9 +19,11 @@ interface TerminalMessage {
 interface TerminalProps {
   isVisible: boolean
   onToggle: () => void
+  height?: number
+  onHeightChange?: (height: number) => void
 }
 
-export default function TerminalComponent({ isVisible, onToggle }: TerminalProps) {
+export default function TerminalComponent({ isVisible, onToggle, height = 300, onHeightChange }: TerminalProps) {
   const [messages, setMessages] = useState<TerminalMessage[]>([
     {
       id: "1",
@@ -38,6 +40,9 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
   const scrollRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const webcontainer = WebContainerService.getInstance()
+
+  const [isResizing, setIsResizing] = useState(false)
+  const resizeRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -216,6 +221,42 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
     { label: "List Files", command: "ls", icon: "📁" },
   ]
 
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsResizing(true)
+    e.preventDefault()
+  }
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing || !onHeightChange) return
+
+      const newHeight = window.innerHeight - e.clientY
+      const minHeight = 150
+      const maxHeight = window.innerHeight * 0.6
+
+      const clampedHeight = Math.min(Math.max(newHeight, minHeight), maxHeight)
+      onHeightChange(clampedHeight)
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+    }
+
+    if (isResizing) {
+      document.addEventListener("mousemove", handleMouseMove)
+      document.addEventListener("mouseup", handleMouseUp)
+      document.body.style.cursor = "row-resize"
+      document.body.style.userSelect = "none"
+    }
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove)
+      document.removeEventListener("mouseup", handleMouseUp)
+      document.body.style.cursor = ""
+      document.body.style.userSelect = ""
+    }
+  }, [isResizing, onHeightChange])
+
   if (!isVisible) {
     return (
       <div className="h-8 bg-zinc-800 border-t border-zinc-700 flex items-center px-4">
@@ -228,8 +269,19 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
   }
 
   return (
-    <div className="flex flex-col bg-zinc-900 border-t border-zinc-700 min-h-[200px] max-h-[50vh] overflow-hidden">
-      {/* Header */}
+    <div className="flex flex-col bg-zinc-900 border-t border-zinc-700 overflow-hidden" style={{ height }}>
+      {onHeightChange && (
+        <div
+          ref={resizeRef}
+          className={`h-1 bg-zinc-700 hover:bg-zinc-600 cursor-row-resize transition-colors flex items-center justify-center ${
+            isResizing ? "bg-blue-500" : ""
+          }`}
+          onMouseDown={handleMouseDown}
+        >
+          <GripHorizontal className="w-4 h-4 text-zinc-500" />
+        </div>
+      )}
+
       <div className="h-8 bg-zinc-800 border-b border-zinc-700 flex items-center justify-between px-4 flex-shrink-0">
         <div className="flex items-center gap-2">
           <TerminalIcon className="w-4 h-4 text-green-400" />
@@ -258,7 +310,6 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
         </div>
       </div>
 
-      {/* Quick Actions */}
       <div className="px-2 py-1 bg-zinc-800 border-b border-zinc-700 flex gap-1 overflow-x-auto flex-shrink-0">
         {quickActions.map((action) => (
           <Button
@@ -276,7 +327,6 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
         ))}
       </div>
 
-      {/* Messages */}
       <ScrollArea className="flex-1 min-h-0 p-2" ref={scrollRef}>
         <div className="space-y-1 font-mono text-sm">
           {messages.map((message) => (
@@ -304,7 +354,6 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
         </div>
       </ScrollArea>
 
-      {/* Input */}
       <div className="p-2 border-t border-zinc-700 flex-shrink-0">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <span className="text-green-400 font-mono text-sm self-center font-semibold">$</span>

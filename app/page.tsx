@@ -9,7 +9,7 @@ import PreviewPanel from "@/components/preview-panel"
 import ResizablePanels from "@/components/layout/resizable-panels"
 import Header from "@/components/layout/header"
 import type { ProjectState } from "@/lib/types"
-import { GitHubRepositoryFetcher, convertGitHubFilesToFileNodes } from "@/lib/github-fetcher"
+import { algorandBoltFileTree, convertStaticTreeToFileNodes } from "@/lib/static-file-tree"
 
 export default function Home() {
   const [projectState, setProjectState] = useState<ProjectState>({
@@ -25,17 +25,32 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<"code" | "preview">("code")
   const [fileContents, setFileContents] = useState<Record<string, string>>({})
+  const [isLoadingFiles, setIsLoadingFiles] = useState(true)
+  const [terminalHeight, setTerminalHeight] = useState(300)
 
   const refreshFiles = useCallback(async () => {
     try {
-      console.log("[v0] Refreshing files from GitHub...")
-      const repositoryFiles = await GitHubRepositoryFetcher.fetchRepositoryStructure()
-      const files = convertGitHubFilesToFileNodes(repositoryFiles)
+      console.log("[v0] Refreshing files from static tree...")
+      const files = convertStaticTreeToFileNodes(algorandBoltFileTree)
+
+      // Extract file contents from the static tree
+      const contents: Record<string, string> = {}
+      const extractContents = (tree: any, path = "") => {
+        for (const [name, item] of Object.entries(tree)) {
+          const fullPath = path ? `${path}/${name}` : name
+          if ("file" in item) {
+            contents[fullPath] = item.file.contents
+          } else if ("directory" in item) {
+            extractContents(item.directory, fullPath)
+          }
+        }
+      }
+      extractContents(algorandBoltFileTree)
 
       setProjectState((prev) => ({ ...prev, files }))
-      setFileContents(repositoryFiles)
+      setFileContents(contents)
 
-      console.log("[v0] Files refreshed and synced successfully")
+      console.log("[v0] Files refreshed from static tree successfully")
     } catch (error) {
       console.error("[v0] Failed to refresh files:", error)
     }
@@ -44,28 +59,53 @@ export default function Home() {
   useEffect(() => {
     const initializeProject = async () => {
       try {
-        console.log("[v0] Loading Algorand repository from GitHub...")
+        console.log("[v0] Loading Algorand repository from static tree...")
+        setIsLoadingFiles(true)
 
-        const repositoryFiles = await GitHubRepositoryFetcher.fetchRepositoryStructure()
-        const files = convertGitHubFilesToFileNodes(repositoryFiles)
+        const files = convertStaticTreeToFileNodes(algorandBoltFileTree)
+
+        // Extract file contents from the static tree
+        const contents: Record<string, string> = {}
+        const extractContents = (tree: any, path = "") => {
+          for (const [name, item] of Object.entries(tree)) {
+            const fullPath = path ? `${path}/${name}` : name
+            if ("file" in item) {
+              contents[fullPath] = item.file.contents
+            } else if ("directory" in item) {
+              extractContents(item.directory, fullPath)
+            }
+          }
+        }
+        extractContents(algorandBoltFileTree)
 
         setProjectState((prev) => ({ ...prev, files }))
-        setFileContents(repositoryFiles)
+        setFileContents(contents)
 
         // Set active file to App.tsx or index.html if available
-        const defaultFile = repositoryFiles["src/App.tsx"]
+        const defaultFile = contents["src/App.tsx"]
           ? "src/App.tsx"
-          : repositoryFiles["index.html"]
+          : contents["index.html"]
             ? "index.html"
-            : Object.keys(repositoryFiles)[0]
+            : Object.keys(contents)[0]
 
         if (defaultFile) {
           setProjectState((prev) => ({ ...prev, activeFile: defaultFile }))
         }
 
+        try {
+          const { WebContainerService } = await import("@/lib/webcontainer")
+          const webcontainer = WebContainerService.getInstance()
+          await webcontainer.mountStaticFiles(algorandBoltFileTree)
+          console.log("[v0] Files mounted to WebContainer successfully")
+        } catch (error) {
+          console.warn("[v0] Failed to mount files to WebContainer:", error)
+        }
+
         console.log("[v0] Algorand repository loaded successfully")
+        setIsLoadingFiles(false)
       } catch (error) {
         console.error("[v0] Failed to initialize project:", error)
+        setIsLoadingFiles(false)
 
         setProjectState((prev) => ({
           ...prev,
@@ -132,8 +172,8 @@ export default function Home() {
 
         // Update file tree if it's a new file
         if (!fileContents[filePath]) {
-          const updatedFiles = { ...fileContents, [filePath]: code }
-          const files = convertGitHubFilesToFileNodes(updatedFiles)
+          const updatedContents = { ...fileContents, [filePath]: code }
+          const files = convertStaticTreeToFileNodes(algorandBoltFileTree)
           setProjectState((prev) => ({ ...prev, files }))
         }
 
@@ -216,8 +256,7 @@ export default function Home() {
             : ""
 
         setFileContents((prev) => ({ ...prev, [filePath]: defaultContent }))
-        const updatedFiles = { ...fileContents, [filePath]: defaultContent }
-        const files = convertGitHubFilesToFileNodes(updatedFiles)
+        const files = convertStaticTreeToFileNodes(algorandBoltFileTree)
         setProjectState((prev) => ({ ...prev, files, activeFile: filePath }))
       } catch (error) {
         console.error("[v0] Failed to create file:", error)
@@ -232,8 +271,7 @@ export default function Home() {
       try {
         const placeholderPath = `src/${name}/.gitkeep`
         setFileContents((prev) => ({ ...prev, [placeholderPath]: "" }))
-        const updatedFiles = { ...fileContents, [placeholderPath]: "" }
-        const files = convertGitHubFilesToFileNodes(updatedFiles)
+        const files = convertStaticTreeToFileNodes(algorandBoltFileTree)
         setProjectState((prev) => ({ ...prev, files }))
       } catch (error) {
         console.error("[v0] Failed to create folder:", error)
@@ -257,9 +295,7 @@ export default function Home() {
           setProjectState((prev) => ({ ...prev, activeFile: null }))
         }
 
-        const updatedFiles = { ...fileContents }
-        delete updatedFiles[path]
-        const files = convertGitHubFilesToFileNodes(updatedFiles)
+        const files = convertStaticTreeToFileNodes(algorandBoltFileTree)
         setProjectState((prev) => ({ ...prev, files }))
       } catch (error) {
         console.error("[v0] Failed to delete file:", error)
@@ -408,8 +444,8 @@ export default function Home() {
   const leftPanel = <ChatInterface onCodeGenerated={handleCodeGenerated} />
 
   const rightPanel = (
-    <div className="h-full flex flex-col">
-      <div className="flex border-b border-zinc-700 bg-zinc-900">
+    <div className="h-full flex flex-col min-h-0">
+      <div className="flex border-b border-zinc-700 bg-zinc-900 flex-shrink-0">
         <button
           onClick={() => setActiveTab("code")}
           className={`px-4 py-2 text-sm font-medium transition-colors ${
@@ -432,10 +468,13 @@ export default function Home() {
         </button>
       </div>
 
-      <div className="flex-1 flex">
+      <div
+        className="flex-1 flex min-h-0 overflow-hidden"
+        style={{ minHeight: `calc(100% - ${terminalHeight}px - 40px)` }}
+      >
         {activeTab === "code" ? (
           <>
-            <div className="w-64 flex-shrink-0">
+            <div className="w-64 flex-shrink-0 overflow-hidden">
               <FileExplorer
                 files={projectState.files}
                 activeFile={projectState.activeFile}
@@ -444,9 +483,10 @@ export default function Home() {
                 onCreateFolder={handleCreateFolder}
                 onDeleteFile={handleDeleteFile}
                 onRefresh={refreshFiles}
+                isLoading={isLoadingFiles}
               />
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-0 overflow-hidden">
               <CodeEditor
                 files={projectState.files}
                 activeFile={projectState.activeFile}
@@ -454,11 +494,12 @@ export default function Home() {
                 onFileChange={handleFileChange}
                 onFileClose={handleFileClose}
                 fileContents={fileContents}
+                isLoading={isLoadingFiles}
               />
             </div>
           </>
         ) : (
-          <div className="flex-1">
+          <div className="flex-1 min-w-0 overflow-hidden">
             <PreviewPanel
               url={previewUrl}
               isLoading={isLoading}
@@ -469,7 +510,14 @@ export default function Home() {
         )}
       </div>
 
-      <Terminal isVisible={projectState.terminal.isVisible} onToggle={handleToggleTerminal} />
+      <div className="flex-shrink-0">
+        <Terminal
+          isVisible={projectState.terminal.isVisible}
+          onToggle={handleToggleTerminal}
+          height={terminalHeight}
+          onHeightChange={setTerminalHeight}
+        />
+      </div>
     </div>
   )
 
@@ -477,7 +525,7 @@ export default function Home() {
     <div className="h-screen bg-zinc-950 flex flex-col overflow-hidden">
       <Header isRunning={projectState.isRunning} onRun={handleRun} onStop={handleStop} projectName="Algokit IDE" />
 
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         <ResizablePanels
           leftPanel={leftPanel}
           rightPanel={rightPanel}
