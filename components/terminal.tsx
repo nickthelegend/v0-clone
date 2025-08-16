@@ -228,7 +228,7 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
   }
 
   return (
-    <div className="h-64 min-h-[200px] max-h-[400px] bg-zinc-900 border-t border-zinc-700 flex flex-col overflow-hidden">
+    <div className="flex flex-col bg-zinc-900 border-t border-zinc-700 min-h-[200px] max-h-[50vh] overflow-hidden">
       {/* Header */}
       <div className="h-8 bg-zinc-800 border-b border-zinc-700 flex items-center justify-between px-4 flex-shrink-0">
         <div className="flex items-center gap-2">
@@ -267,7 +267,7 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
             variant="ghost"
             onClick={() => !isRunning && handleCommand(action.command)}
             disabled={isRunning}
-            className="h-6 text-xs text-zinc-400 hover:text-white whitespace-nowrap"
+            className="h-6 text-xs text-zinc-400 hover:text-white whitespace-nowrap flex-shrink-0"
             title={action.command}
           >
             <span className="mr-1">{action.icon}</span>
@@ -282,7 +282,7 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`whitespace-pre-wrap ${
+              className={`whitespace-pre-wrap break-words ${
                 message.type === "command"
                   ? "text-green-400 font-semibold"
                   : message.type === "error"
@@ -306,7 +306,7 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
 
       {/* Input */}
       <div className="p-2 border-t border-zinc-700 flex-shrink-0">
-        <div className="flex gap-2">
+        <form onSubmit={handleSubmit} className="flex gap-2">
           <span className="text-green-400 font-mono text-sm self-center font-semibold">$</span>
           <Input
             ref={inputRef}
@@ -317,7 +317,7 @@ export default function TerminalComponent({ isVisible, onToggle }: TerminalProps
             disabled={isRunning}
             className="flex-1 h-8 bg-transparent border-none text-zinc-300 font-mono text-sm focus:ring-0 focus:outline-none placeholder-zinc-500"
           />
-        </div>
+        </form>
       </div>
     </div>
   )

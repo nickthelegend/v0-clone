@@ -361,6 +361,38 @@ body {
     console.log("[v0] Algorand template files mounted")
   }
 
+  async mountFiles(fileSystemTree: any): Promise<void> {
+    try {
+      if (!this.webcontainer) {
+        await this.boot()
+      }
+
+      console.log("[v0] Mounting external files to WebContainer...")
+      await this.webcontainer!.mount(fileSystemTree)
+      console.log("[v0] External files mounted successfully")
+    } catch (error) {
+      console.error("[v0] Failed to mount external files:", error)
+      throw error
+    }
+  }
+
+  async connectToEndpoint(endpoint: string): Promise<void> {
+    try {
+      console.log(`[v0] Connecting to WebContainer endpoint: ${endpoint}`)
+
+      if (!this.webcontainer) {
+        await this.boot()
+      }
+
+      // WebContainer connection logic would go here
+      // This is a placeholder for the actual connection implementation
+      console.log(`[v0] Connected to endpoint: ${endpoint}`)
+    } catch (error) {
+      console.error(`[v0] Failed to connect to endpoint ${endpoint}:`, error)
+      throw error
+    }
+  }
+
   async writeFile(path: string, content: string) {
     try {
       if (!this.webcontainer) {

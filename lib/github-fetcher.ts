@@ -30,7 +30,7 @@ export class GitHubRepositoryFetcher {
 
       console.log("[v0] Repository structure fetched successfully")
 
-      await this.syncToWebContainer(files)
+      await this.mountToWebContainer(files)
 
       return files
     } catch (error) {
@@ -86,25 +86,57 @@ export class GitHubRepositoryFetcher {
     }
   }
 
-  private static async syncToWebContainer(files: Record<string, string>): Promise<void> {
+  private static async mountToWebContainer(files: Record<string, string>): Promise<void> {
     try {
       const { WebContainerService } = await import("@/lib/webcontainer")
       const webcontainer = WebContainerService.getInstance()
 
-      console.log("[v0] Syncing files to WebContainer...")
+      console.log("[v0] Building FileSystemTree structure...")
 
-      for (const [path, content] of Object.entries(files)) {
-        try {
-          await webcontainer.writeFile(path, content)
-        } catch (error) {
-          console.warn(`[v0] Failed to write file ${path}:`, error)
+      // Build the nested FileSystemTree structure
+      const fileSystemTree = this.buildFileSystemTree(files)
+
+      console.log("[v0] Mounting files to WebContainer...")
+
+      // Get the WebContainer instance and mount files
+      const container = await webcontainer.boot()
+      await container.mount(fileSystemTree)
+
+      console.log("[v0] Files mounted to WebContainer successfully")
+    } catch (error) {
+      console.warn("[v0] WebContainer mount failed:", error)
+    }
+  }
+
+  private static buildFileSystemTree(files: Record<string, string>): any {
+    const tree: any = {}
+
+    for (const [path, content] of Object.entries(files)) {
+      const parts = path.split("/")
+      let current = tree
+
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i]
+        const isFile = i === parts.length - 1
+
+        if (isFile) {
+          current[part] = {
+            file: {
+              contents: content,
+            },
+          }
+        } else {
+          if (!current[part]) {
+            current[part] = {
+              directory: {},
+            }
+          }
+          current = current[part].directory
         }
       }
-
-      console.log("[v0] Files synced to WebContainer successfully")
-    } catch (error) {
-      console.warn("[v0] WebContainer sync failed:", error)
     }
+
+    return tree
   }
 }
 

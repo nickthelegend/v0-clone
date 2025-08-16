@@ -294,6 +294,12 @@ export default function Home() {
       const { WebContainerService } = await import("@/lib/webcontainer")
       const webcontainer = WebContainerService.getInstance()
 
+      try {
+        await webcontainer.connectToEndpoint("/webcontainer/connect/96435430")
+      } catch (error) {
+        console.warn("[v0] WebContainer endpoint connection failed:", error)
+      }
+
       // Install dependencies first
       await webcontainer.installDependencies()
 

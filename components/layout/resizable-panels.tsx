@@ -63,14 +63,14 @@ export default function ResizablePanels({
   }, [isDragging, handleMouseMove, handleMouseUp])
 
   return (
-    <div ref={containerRef} className="flex h-full overflow-hidden">
-      <div style={{ width: `${leftWidth}%` }} className="flex-shrink-0 overflow-hidden">
+    <div ref={containerRef} className="flex h-full min-h-0 overflow-hidden">
+      <div style={{ width: `${leftWidth}%` }} className="flex-shrink-0 min-w-0 overflow-hidden">
         {leftPanel}
       </div>
 
       <div
         className={cn(
-          "w-1 bg-zinc-800 hover:bg-zinc-600 cursor-col-resize transition-colors",
+          "w-1 bg-zinc-800 hover:bg-zinc-600 cursor-col-resize transition-colors flex-shrink-0",
           isDragging && "bg-blue-500",
         )}
         onMouseDown={handleMouseDown}
