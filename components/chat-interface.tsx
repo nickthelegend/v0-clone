@@ -76,7 +76,6 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
   const renderMessageContent = (content: string, messageId: string) => {
     return (
       <ReactMarkdown
-        // className="prose prose-invert prose-sm max-w-none"
         components={{
           code({ node, inline, className, children, ...props }) {
             const match = /language-(\w+)/.exec(className || "")
@@ -200,6 +199,7 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
             role: m.role,
             content: m.content,
           })),
+          agent, // Include selected agent
         }),
       })
 
@@ -207,38 +207,57 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
 
       if (!response.ok) throw new Error("Failed to get response")
 
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error("No reader available")
+      const contentType = response.headers.get("content-type")
 
-      let assistantContent = ""
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: "",
-        timestamp: new Date(),
-      }
+      if (contentType?.includes("text/plain")) {
+        // Handle plain text response (from Web Agent)
+        const text = await response.text()
 
-      setMessages((prev) => [...prev, assistantMessage])
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: text,
+          timestamp: new Date(),
+        }
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+        setMessages((prev) => [...prev, assistantMessage])
+      } else {
+        // Handle streaming response (default behavior)
+        const reader = response.body?.getReader()
+        if (!reader) throw new Error("No reader available")
 
-        const chunk = new TextDecoder().decode(value)
-        assistantContent += chunk
+        let assistantContent = ""
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: "assistant",
+          content: "",
+          timestamp: new Date(),
+        }
 
-        setMessages((prev) => prev.map((m) => (m.id === assistantMessage.id ? { ...m, content: assistantContent } : m)))
-      }
+        setMessages((prev) => [...prev, assistantMessage])
 
-      console.log("[v0] Final assistant content:", assistantContent)
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
 
-      // Auto-apply code blocks if there's only one
-      const codeBlocks = assistantContent.match(/```(\w+)?\s*(?:file="([^"]+)")?\n([\s\S]*?)```/g)
-      if (codeBlocks && codeBlocks.length === 1 && onCodeGenerated) {
-        const block = codeBlocks[0]
-        setTimeout(() => {
-          onCodeGenerated(block, "generated.tsx")
-        }, 1000)
+          const chunk = new TextDecoder().decode(value)
+          assistantContent += chunk
+
+          setMessages((prev) =>
+            prev.map((m) => (m.id === assistantMessage.id ? { ...m, content: assistantContent } : m)),
+          )
+        }
+
+        console.log("[v0] Final assistant content:", assistantContent)
+
+        // Auto-apply code blocks if there's only one
+        const codeBlocks = assistantContent.match(/```(\w+)?\s*(?:file="([^"]+)")?\n([\s\S]*?)```/g)
+        if (codeBlocks && codeBlocks.length === 1 && onCodeGenerated) {
+          const block = codeBlocks[0]
+          setTimeout(() => {
+            onCodeGenerated(block, "generated.tsx")
+          }, 1000)
+        }
       }
     } catch (error) {
       console.error("[v0] Chat error:", error)
@@ -265,6 +284,7 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
         <p className="text-sm text-zinc-400">Powered by Mistral AI</p>
       </div>
 
+     
 
       <ScrollArea
         ref={scrollAreaRef}
