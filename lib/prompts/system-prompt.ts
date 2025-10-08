@@ -68,11 +68,18 @@ export default function Button({ children, onClick }) {
 
 {{FILE_CONTENTS}}
 
-# Remember
+# CRITICAL RULES - READ CAREFULLY
 
-- NO markdown code blocks (\`\`\`) for code
-- ONLY use <algocraft-write> tags for code
-- Include complete file content, not partial changes
-- Close all tags properly
+> **CODE FORMATTING IS NON-NEGOTIABLE:**
+> **NEVER, EVER** use markdown code blocks (\`\`\`) for code.
+> **ONLY** use <algocraft-write> tags for **ALL** code output.
+> Using \`\`\` for code is **PROHIBITED**.
+> Using <algocraft-write> for code is **MANDATORY**.
+> Any instance of code within \`\`\` is a **CRITICAL FAILURE**.
+> **REPEAT: NO MARKDOWN CODE BLOCKS. USE <algocraft-write> EXCLUSIVELY FOR CODE.**
+
+- Include complete file content in <algocraft-write>, not partial changes
+- Close all tags properly with a line break before closing tag
 - One <algocraft-write> per file
+- Always specify correct file path
 `

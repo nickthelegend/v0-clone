@@ -3,15 +3,18 @@
 import { useState, useRef, useEffect } from "react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
-import { User, Bot } from "lucide-react"
+import { User, Bot, Undo2, Redo2, ChevronDown, ChevronRight } from "lucide-react"
 import type { Message } from "@/lib/types"
 import ChatInput from "./chat-input"
 import { AlgoCraftMarkdownParser } from "./algocraft-markdown-parser"
 import { ResponseProcessor, ProcessResult } from "@/lib/response-processor"
 import { WebContainerService } from "@/lib/webcontainer"
+import { VersionManager } from "@/lib/version-manager"
 
 interface ChatInterfaceProps {
   onCodeGenerated?: () => void
+  fileTree?: any[]
+  fileContents?: Record<string, string>
 }
 
 interface CodeBlock {
@@ -20,19 +23,22 @@ interface CodeBlock {
   filename?: string
 }
 
-export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
+export default function ChatInterface({ onCodeGenerated, fileTree, fileContents }: ChatInterfaceProps) {
+  const [versionManager] = useState(() => new VersionManager())
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
       role: "assistant",
       content:
-        "Hello! I'm AlgoCraft, your AI coding assistant. I can help you build Algorand applications with React, TypeScript, and Vite.\n\nI'll use special tags to make changes to your code:\n• `<algocraft-write>` - Create or update files\n• `<algocraft-delete>` - Remove files\n• `<algocraft-rename>` - Rename files\n• `<algocraft-install>` - Install packages\n\nWhat would you like to build?",
+        "Hello! I'm AlgoCraft, your AI coding assistant. I can help you build Algorand applications with React, TypeScript, and Vite.\n\nI'll use special tags to make changes to your code:\n\n• `<algocraft-write>` - Create or update files\n• `<algocraft-delete>` - Remove files\n• `<algocraft-rename>` - Rename files\n• `<algocraft-install>` - Install packages\n\nWhat would you like to build?",
       timestamp: new Date(),
     },
   ])
   const [isLoading, setIsLoading] = useState(false)
   const [pendingResult, setPendingResult] = useState<ProcessResult | null>(null)
+  const [pendingResponse, setPendingResponse] = useState<string | null>(null)
   const [showApproval, setShowApproval] = useState(false)
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set())
 
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -53,10 +59,22 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
   }, [messages, isLoading])
 
   const handleApproveChanges = async () => {
-    if (!pendingResult) return
+    if (!pendingResult || !pendingResponse) return
 
     setShowApproval(false)
+    
+    // Create version snapshot before changes
+    if (fileContents) {
+      versionManager.createVersion('Before AI changes', fileContents)
+    }
+    
+    // Execute the changes
+    const webcontainer = WebContainerService.getInstance()
+    const processor = new ResponseProcessor(webcontainer)
+    await processor.executeChanges(pendingResponse)
+    
     setPendingResult(null)
+    setPendingResponse(null)
     
     // Refresh file tree and preview after changes applied
     if (onCodeGenerated) {
@@ -67,9 +85,38 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
   const handleRejectChanges = () => {
     setShowApproval(false)
     setPendingResult(null)
+    setPendingResponse(null)
   }
 
-  const handleSubmit = async (input: string, agent: string) => {
+  const handleUndo = async () => {
+    const snapshot = versionManager.undo()
+    if (!snapshot) return
+
+    const webcontainer = WebContainerService.getInstance()
+    for (const [path, content] of Object.entries(snapshot)) {
+      await webcontainer.writeFile(path, content)
+    }
+
+    if (onCodeGenerated) {
+      onCodeGenerated()
+    }
+  }
+
+  const handleRedo = async () => {
+    const snapshot = versionManager.redo()
+    if (!snapshot) return
+
+    const webcontainer = WebContainerService.getInstance()
+    for (const [path, content] of Object.entries(snapshot)) {
+      await webcontainer.writeFile(path, content)
+    }
+
+    if (onCodeGenerated) {
+      onCodeGenerated()
+    }
+  }
+
+  const handleSubmit = async (input: string, agent: string, fileTree?: any[], fileContents?: Record<string, string>) => {
     if (!input.trim() || isLoading) return
 
     console.log("[v0] Chat submission:", { input, agent })
@@ -94,6 +141,8 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
             content: m.content,
           })),
           agent, // Include selected agent
+          fileTree, // Include file tree for context
+          fileContents, // Include file contents for context
         }),
       })
 
@@ -144,6 +193,7 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
               result.renamedFiles.length > 0 || result.installedPackages.length > 0) {
             console.log("[AlgoCraft] Showing approval dialog")
             setPendingResult(result)
+            setPendingResponse(text)
             setShowApproval(true)
           } else {
             console.log("[AlgoCraft] No operations found to approve")
@@ -198,6 +248,7 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
               result.renamedFiles.length > 0 || result.installedPackages.length > 0) {
             console.log("[AlgoCraft] Showing approval dialog")
             setPendingResult(result)
+            setPendingResponse(assistantContent)
             setShowApproval(true)
           } else {
             console.log("[AlgoCraft] No operations found to approve")
@@ -225,7 +276,29 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
   return (
     <div className="flex flex-col h-full max-h-full bg-zinc-900 border-r border-zinc-800 overflow-hidden">
       <div className="p-4 border-b border-zinc-800 flex-shrink-0">
-        <h2 className="text-lg font-semibold text-white">AI Assistant</h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-lg font-semibold text-white">AI Assistant</h2>
+          <div className="flex gap-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleUndo}
+              disabled={!versionManager.canUndo()}
+              className="h-8 w-8 p-0"
+            >
+              <Undo2 className="h-4 w-4" />
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={handleRedo}
+              disabled={!versionManager.canRedo()}
+              className="h-8 w-8 p-0"
+            >
+              <Redo2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
         <p className="text-sm text-zinc-400">Powered by Mistral AI</p>
       </div>
 
@@ -253,8 +326,10 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <AlgoCraftMarkdownParser content={message.content} />
-                <div className="text-xs text-zinc-500 mt-2">{message.timestamp.toLocaleTimeString()}</div>
+                <div className="text-zinc-100">
+                  <AlgoCraftMarkdownParser content={message.content} />
+                </div>
+                <div className="text-xs text-zinc-400 mt-2">{message.timestamp.toLocaleTimeString()}</div>
               </div>
             </div>
           ))}
@@ -275,39 +350,66 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
         </div>
       </ScrollArea>
 
-      {showApproval && pendingResult && (
-        <div className="border-t border-zinc-700 p-4 bg-zinc-800 flex-shrink-0">
+      {showApproval && pendingResult && pendingResponse && (
+        <div className="border-t border-zinc-700 p-4 bg-zinc-800 flex-shrink-0 max-h-96 overflow-y-auto">
           <h3 className="font-medium mb-3 text-white">Approve Changes?</h3>
-          <div className="space-y-2 mb-4 max-h-40 overflow-y-auto">
-            {pendingResult.writtenFiles.map((file, i) => (
-              <div key={`write-${i}`} className="text-sm text-zinc-300">
-                ✏️ Write: <code className="text-blue-400">{file}</code>
-              </div>
-            ))}
+          <div className="space-y-2 mb-4">
+            {pendingResult.writtenFiles.map((file, i) => {
+              const isExpanded = expandedFiles.has(file)
+              const { getAlgoCraftWriteTags } = require('@/lib/tag-parser')
+              const tags = getAlgoCraftWriteTags(pendingResponse)
+              const fileTag = tags.find(t => t.path === file)
+              
+              return (
+                <div key={`write-${i}`} className="border border-blue-500 rounded">
+                  <div 
+                    className="flex items-center justify-between p-2 cursor-pointer hover:bg-zinc-700"
+                    onClick={() => {
+                      const newExpanded = new Set(expandedFiles)
+                      if (isExpanded) newExpanded.delete(file)
+                      else newExpanded.add(file)
+                      setExpandedFiles(newExpanded)
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      <span className="text-sm text-zinc-300">✏️ Write:</span>
+                      <code className="text-blue-400 text-sm">{file}</code>
+                    </div>
+                    <span className="text-xs text-zinc-500">{fileTag?.content.length || 0} chars</span>
+                  </div>
+                  {isExpanded && fileTag && (
+                    <pre className="p-2 bg-zinc-900 text-xs overflow-x-auto max-h-60">
+                      <code>{fileTag.content.slice(0, 500)}{fileTag.content.length > 500 ? '...' : ''}</code>
+                    </pre>
+                  )}
+                </div>
+              )
+            })}
             {pendingResult.deletedFiles.map((file, i) => (
-              <div key={`delete-${i}`} className="text-sm text-zinc-300">
+              <div key={`delete-${i}`} className="text-sm text-zinc-300 p-2 border border-red-500 rounded">
                 🗑️ Delete: <code className="text-red-400">{file}</code>
               </div>
             ))}
             {pendingResult.renamedFiles.map((file, i) => (
-              <div key={`rename-${i}`} className="text-sm text-zinc-300">
+              <div key={`rename-${i}`} className="text-sm text-zinc-300 p-2 border border-purple-500 rounded">
                 🔄 Rename: <code className="text-purple-400">{file}</code>
               </div>
             ))}
             {pendingResult.installedPackages.map((pkg, i) => (
-              <div key={`install-${i}`} className="text-sm text-zinc-300">
+              <div key={`install-${i}`} className="text-sm text-zinc-300 p-2 border border-green-500 rounded">
                 📦 Install: <code className="text-green-400">{pkg}</code>
               </div>
             ))}
             {pendingResult.errors.length > 0 && (
-              <div className="text-sm text-red-400 mt-2">
+              <div className="text-sm text-red-400 mt-2 p-2 border border-red-500 rounded">
                 ⚠️ Errors: {pendingResult.errors.join(", ")}
               </div>
             )}
           </div>
           <div className="flex gap-2">
             <Button onClick={handleApproveChanges} className="flex-1 bg-green-600 hover:bg-green-700">
-              Apply Changes
+              Apply {pendingResult.writtenFiles.length + pendingResult.deletedFiles.length} Changes
             </Button>
             <Button variant="outline" onClick={handleRejectChanges} className="flex-1">
               Cancel
@@ -317,7 +419,10 @@ export default function ChatInterface({ onCodeGenerated }: ChatInterfaceProps) {
       )}
 
       <div className="p-4 border-t border-zinc-800 flex-shrink-0">
-        <ChatInput onSubmit={handleSubmit} disabled={isLoading} />
+        <ChatInput 
+          onSubmit={(input, agent) => handleSubmit(input, agent, fileTree, fileContents)} 
+          disabled={isLoading} 
+        />
       </div>
     </div>
   )

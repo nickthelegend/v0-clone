@@ -23,6 +23,36 @@ export class ResponseProcessor {
   }
 
   async processResponse(fullResponse: string): Promise<ProcessResult> {
+    try {
+      // Extract all tags (but don't execute yet)
+      const writeTags = getAlgoCraftWriteTags(fullResponse)
+      const renameTags = getAlgoCraftRenameTags(fullResponse)
+      const deletePaths = getAlgoCraftDeleteTags(fullResponse)
+      const installPackages = getAlgoCraftInstallTags(fullResponse)
+
+      // Return what needs to be done (for approval dialog)
+      return {
+        success: true,
+        writtenFiles: writeTags.map(t => t.path),
+        renamedFiles: renameTags.map(t => t.to),
+        deletedFiles: deletePaths,
+        installedPackages: installPackages,
+        errors: [],
+      }
+    } catch (error) {
+      console.error("[AlgoCraft] Processing error:", error)
+      return {
+        success: false,
+        writtenFiles: [],
+        renamedFiles: [],
+        deletedFiles: [],
+        installedPackages: [],
+        errors: [error instanceof Error ? error.message : String(error)],
+      }
+    }
+  }
+
+  async executeChanges(fullResponse: string): Promise<ProcessResult> {
     const writtenFiles: string[] = []
     const renamedFiles: string[] = []
     const deletedFiles: string[] = []
@@ -36,7 +66,7 @@ export class ResponseProcessor {
       const deletePaths = getAlgoCraftDeleteTags(fullResponse)
       const installPackages = getAlgoCraftInstallTags(fullResponse)
 
-      // Process in order: delete → rename → write → install
+      // Execute in order: delete → rename → write → install
 
       // 1. Delete files
       for (const filePath of deletePaths) {

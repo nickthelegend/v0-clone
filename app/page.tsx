@@ -431,7 +431,13 @@ export default function Home() {
     }
   }, [fileContents, projectState.activeFile])
 
-  const leftPanel = <ChatInterface onCodeGenerated={handleCodeGenerated} />
+  const leftPanel = (
+    <ChatInterface 
+      onCodeGenerated={handleCodeGenerated}
+      fileTree={projectState.files}
+      fileContents={fileContents}
+    />
+  )
 
   const rightPanel = (
     <div className="h-full flex flex-col min-h-0">

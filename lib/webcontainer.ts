@@ -399,6 +399,17 @@ body {
         await this.boot()
       }
 
+      // Create parent directories if they don't exist
+      const parts = path.split('/')
+      if (parts.length > 1) {
+        const dirPath = parts.slice(0, -1).join('/')
+        try {
+          await this.webcontainer!.fs.mkdir(dirPath, { recursive: true })
+        } catch (err) {
+          // Directory might already exist, ignore error
+        }
+      }
+
       await this.webcontainer!.fs.writeFile(path, content)
       console.log(`[v0] File written: ${path}`)
     } catch (error) {

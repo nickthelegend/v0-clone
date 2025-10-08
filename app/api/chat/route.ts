@@ -1,6 +1,7 @@
 import { streamText } from "ai"
 import { openai } from "@ai-sdk/openai"
 import { SYSTEM_PROMPT } from "@/lib/prompts/system-prompt"
+import { formatContextForAI } from "@/lib/context-manager"
 
 export async function POST(req: Request) {
   try {
@@ -48,10 +49,21 @@ export async function POST(req: Request) {
     }
 
     // Default agent behavior with AlgoCraft system prompt
+    const contextPrompt = fileTree && fileContents 
+      ? formatContextForAI(fileTree, fileContents)
+      : ''
+    
+    const systemPromptWithContext = SYSTEM_PROMPT
+      .replace('{{FILE_TREE}}', contextPrompt ? JSON.stringify(fileTree, null, 2) : 'No files loaded yet')
+      .replace('{{FILE_CONTENTS}}', contextPrompt || 'No files loaded yet')
+
+    console.log('[v0] Context included:', !!contextPrompt)
+    console.log('[v0] System prompt length:', systemPromptWithContext.length)
+
     const result = await streamText({
-      model: openai("gpt-3.5-turbo"),  // Cheapest option for testing
+      model: openai("gpt-4o-mini"),  // Better instruction following than 3.5-turbo
       messages,
-      system: SYSTEM_PROMPT,
+      system: systemPromptWithContext,
     })
 
     return result.toTextStreamResponse()

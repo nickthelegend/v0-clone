@@ -5,14 +5,18 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { FileText, Trash2, Package, Lightbulb, RefreshCw } from 'lucide-react'
 
-// Decode HTML entities
+// Decode HTML entities (works on both client and server)
 function decodeHtml(html: string): string {
-  const txt = document.createElement('textarea')
-  txt.innerHTML = html
-  return txt.value
+  return html
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
 }
 
 export function AlgoCraftMarkdownParser({ content }: { content: string }) {
+  // Ensure text is visible on dark background
   // Pre-process content to wrap AlgoCraft tags in code blocks for ReactMarkdown
   const processedContent = content.replace(
     /(<algocraft-(?:write|delete|rename|install|thinking)[^>]*>[\s\S]*?<\/algocraft-(?:write|delete|rename|install|thinking)>)/g,
@@ -20,6 +24,7 @@ export function AlgoCraftMarkdownParser({ content }: { content: string }) {
   )
   
   return (
+    <div className="text-zinc-100 prose prose-invert max-w-none">
     <ReactMarkdown
       components={{
         code({ node, inline, className, children, ...props }) {
@@ -123,5 +128,6 @@ export function AlgoCraftMarkdownParser({ content }: { content: string }) {
     >
       {processedContent}
     </ReactMarkdown>
+    </div>
   )
 }
