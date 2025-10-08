@@ -24,9 +24,10 @@ interface TerminalProps {
 }
 
 export default function TerminalComponent({ isVisible, onToggle, height = 300, onHeightChange }: TerminalProps) {
+  const messageIdCounter = useRef(0)
   const [messages, setMessages] = useState<TerminalMessage[]>([
     {
-      id: "1",
+      id: "terminal-0",
       type: "info",
       content:
         "🚀 Welcome to v0 Clone Terminal\n💡 Type 'help' for available commands\n⚡ WebContainer ready for development",
@@ -57,10 +58,11 @@ export default function TerminalComponent({ isVisible, onToggle, height = 300, o
   }, [isVisible])
 
   const addMessage = (type: TerminalMessage["type"], content: string) => {
+    messageIdCounter.current += 1
     setMessages((prev) => [
       ...prev,
       {
-        id: Date.now().toString(),
+        id: `terminal-${messageIdCounter.current}`,
         type,
         content,
         timestamp: new Date(),

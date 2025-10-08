@@ -399,6 +399,17 @@ body {
         await this.boot()
       }
 
+      // Create parent directories if they don't exist
+      const parts = path.split('/')
+      if (parts.length > 1) {
+        const dirPath = parts.slice(0, -1).join('/')
+        try {
+          await this.webcontainer!.fs.mkdir(dirPath, { recursive: true })
+        } catch (err) {
+          // Directory might already exist, ignore error
+        }
+      }
+
       await this.webcontainer!.fs.writeFile(path, content)
       console.log(`[v0] File written: ${path}`)
     } catch (error) {
@@ -593,5 +604,47 @@ body {
       console.error(`[v0] Failed to refresh file tree: ${error}`)
       throw error
     }
+  }
+
+  async deleteFile(path: string): Promise<void> {
+    if (!this.webcontainer) await this.boot()
+    try {
+      await this.webcontainer!.fs.rm(path, { recursive: true })
+      console.log(`[v0] File deleted: ${path}`)
+    } catch (error) {
+      console.error(`[v0] Failed to delete ${path}:`, error)
+      throw error
+    }
+  }
+
+  async installPackage(packageName: string): Promise<void> {
+    if (!this.webcontainer) await this.boot()
+    
+    console.log(`[v0] Installing package: ${packageName}`)
+    const process = await this.webcontainer!.spawn('npm', [
+      'install',
+      packageName,
+      '--save',
+      '--legacy-peer-deps'
+    ])
+    
+    return new Promise((resolve, reject) => {
+      process.output.pipeTo(
+        new WritableStream({
+          write(data) {
+            console.log(`[v0] npm install ${packageName}:`, data)
+          },
+        }),
+      )
+
+      process.exit.then((code) => {
+        if (code === 0) {
+          console.log(`[v0] Package installed: ${packageName}`)
+          resolve()
+        } else {
+          reject(new Error(`Failed to install ${packageName}`))
+        }
+      })
+    })
   }
 }

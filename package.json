@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ai-sdk/mistral": "latest",
+    "@ai-sdk/openai": "^2.0.44",
     "@hookform/resolvers": "^3.9.1",
     "@modelcontextprotocol/sdk": "^1.17.3",
     "@monaco-editor/react": "latest",

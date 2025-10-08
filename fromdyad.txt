@@ -1,0 +1,586 @@
+--------------------------------------------------------------------------------
+/src/hooks/useVersions.ts:
+--------------------------------------------------------------------------------
+ 1 | import { useEffect } from "react";
+ 2 | import { useAtom, useAtomValue } from "jotai";
+ 3 | import { versionsListAtom } from "@/atoms/appAtoms";
+ 4 | import { IpcClient } from "@/ipc/ipc_client";
+ 5 | 
+ 6 | import { chatMessagesAtom, selectedChatIdAtom } from "@/atoms/chatAtoms";
+ 7 | import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+ 8 | import type { RevertVersionResponse, Version } from "@/ipc/ipc_types";
+ 9 | import { toast } from "sonner";
+10 | 
+11 | export function useVersions(appId: number | null) {
+12 |   const [, setVersionsAtom] = useAtom(versionsListAtom);
+13 |   const selectedChatId = useAtomValue(selectedChatIdAtom);
+14 |   const [, setMessages] = useAtom(chatMessagesAtom);
+15 |   const queryClient = useQueryClient();
+16 | 
+17 |   const {
+18 |     data: versions,
+19 |     isLoading: loading,
+20 |     error,
+21 |     refetch: refreshVersions,
+22 |   } = useQuery<Version[], Error>({
+23 |     queryKey: ["versions", appId],
+24 |     queryFn: async (): Promise<Version[]> => {
+25 |       if (appId === null) {
+26 |         return [];
+27 |       }
+28 |       const ipcClient = IpcClient.getInstance();
+29 |       return ipcClient.listVersions({ appId });
+30 |     },
+31 |     enabled: appId !== null,
+32 |     initialData: [],
+33 |     meta: { showErrorToast: true },
+34 |   });
+35 | 
+36 |   useEffect(() => {
+37 |     if (versions) {
+38 |       setVersionsAtom(versions);
+39 |     }
+40 |   }, [versions, setVersionsAtom]);
+41 | 
+42 |   const revertVersionMutation = useMutation<
+43 |     RevertVersionResponse,
+44 |     Error,
+45 |     { versionId: string }
+46 |   >({
+47 |     mutationFn: async ({ versionId }: { versionId: string }) => {
+48 |       const currentAppId = appId;
+49 |       if (currentAppId === null) {
+50 |         throw new Error("App ID is null");
+51 |       }
+52 |       const ipcClient = IpcClient.getInstance();
+53 |       return ipcClient.revertVersion({
+54 |         appId: currentAppId,
+55 |         previousVersionId: versionId,
+56 |       });
+57 |     },
+58 |     onSuccess: async (result) => {
+59 |       if ("successMessage" in result) {
+60 |         toast.success(result.successMessage);
+61 |       } else if ("warningMessage" in result) {
+62 |         toast.warning(result.warningMessage);
+63 |       }
+64 |       await queryClient.invalidateQueries({ queryKey: ["versions", appId] });
+65 |       await queryClient.invalidateQueries({
+66 |         queryKey: ["currentBranch", appId],
+67 |       });
+68 |       if (selectedChatId) {
+69 |         const chat = await IpcClient.getInstance().getChat(selectedChatId);
+70 |         setMessages(chat.messages);
+71 |       }
+72 |       await queryClient.invalidateQueries({
+73 |         queryKey: ["problems", appId],
+74 |       });
+75 |     },
+76 |     meta: { showErrorToast: true },
+77 |   });
+78 | 
+79 |   return {
+80 |     versions: versions || [],
+81 |     loading,
+82 |     error,
+83 |     refreshVersions,
+84 |     revertVersion: revertVersionMutation.mutateAsync,
+85 |     isRevertingVersion: revertVersionMutation.isPending,
+86 |   };
+87 | }
+88 | 
+
+--------------------------------------------------------------------------------
+/src/hooks/useCheckoutVersion.ts:
+--------------------------------------------------------------------------------
+ 1 | import { useMutation, useQueryClient } from "@tanstack/react-query";
+ 2 | import { IpcClient } from "@/ipc/ipc_client";
+ 3 | import { useSetAtom } from "jotai";
+ 4 | import { activeCheckoutCounterAtom } from "@/store/appAtoms";
+ 5 | 
+ 6 | interface CheckoutVersionVariables {
+ 7 |   appId: number;
+ 8 |   versionId: string;
+ 9 | }
+10 | 
+11 | export function useCheckoutVersion() {
+12 |   const queryClient = useQueryClient();
+13 |   const setActiveCheckouts = useSetAtom(activeCheckoutCounterAtom);
+14 | 
+15 |   const { isPending: isCheckingOutVersion, mutateAsync: checkoutVersion } =
+16 |     useMutation<void, Error, CheckoutVersionVariables>({
+17 |       mutationFn: async ({ appId, versionId }) => {
+18 |         if (appId === null) {
+19 |           // Should be caught by UI logic before calling, but as a safeguard.
+20 |           throw new Error("App ID is null, cannot checkout version.");
+21 |         }
+22 |         const ipcClient = IpcClient.getInstance();
+23 |         setActiveCheckouts((prev) => prev + 1); // Increment counter
+24 |         try {
+25 |           await ipcClient.checkoutVersion({ appId, versionId });
+26 |         } finally {
+27 |           setActiveCheckouts((prev) => prev - 1); // Decrement counter
+28 |         }
+29 |       },
+30 |       onSuccess: (_, variables) => {
+31 |         // Invalidate queries that depend on the current version/branch
+32 |         queryClient.invalidateQueries({
+33 |           queryKey: ["currentBranch", variables.appId],
+34 |         });
+35 |         queryClient.invalidateQueries({
+36 |           queryKey: ["versions", variables.appId],
+37 |         });
+38 |       },
+39 |       meta: { showErrorToast: true },
+40 |     });
+41 | 
+42 |   return {
+43 |     checkoutVersion,
+44 |     isCheckingOutVersion,
+45 |   };
+46 | }
+47 | 
+
+--------------------------------------------------------------------------------
+/src/ipc/handlers/version_handlers.ts:
+--------------------------------------------------------------------------------
+  1 | import { db } from "../../db";
+  2 | import { apps, messages, versions } from "../../db/schema";
+  3 | import { desc, eq, and, gt } from "drizzle-orm";
+  4 | import type {
+  5 |   Version,
+  6 |   BranchResult,
+  7 |   RevertVersionParams,
+  8 |   RevertVersionResponse,
+  9 | } from "../ipc_types";
+ 10 | import fs from "node:fs";
+ 11 | import path from "node:path";
+ 12 | import { getDyadAppPath } from "../../paths/paths";
+ 13 | import git, { type ReadCommitResult } from "isomorphic-git";
+ 14 | import { withLock } from "../utils/lock_utils";
+ 15 | import log from "electron-log";
+ 16 | import { createLoggedHandler } from "./safe_handle";
+ 17 | import { gitCheckout, gitCommit, gitStageToRevert } from "../utils/git_utils";
+ 18 | 
+ 19 | import {
+ 20 |   getNeonClient,
+ 21 |   getNeonErrorMessage,
+ 22 | } from "../../neon_admin/neon_management_client";
+ 23 | import {
+ 24 |   updatePostgresUrlEnvVar,
+ 25 |   updateDbPushEnvVar,
+ 26 | } from "../utils/app_env_var_utils";
+ 27 | import { storeDbTimestampAtCurrentVersion } from "../utils/neon_timestamp_utils";
+ 28 | import { retryOnLocked } from "../utils/retryOnLocked";
+ 29 | 
+ 30 | const logger = log.scope("version_handlers");
+ 31 | 
+ 32 | const handle = createLoggedHandler(logger);
+ 33 | 
+ 34 | async function restoreBranchForPreview({
+ 35 |   appId,
+ 36 |   dbTimestamp,
+ 37 |   neonProjectId,
+ 38 |   previewBranchId,
+ 39 |   developmentBranchId,
+ 40 | }: {
+ 41 |   appId: number;
+ 42 |   dbTimestamp: string;
+ 43 |   neonProjectId: string;
+ 44 |   previewBranchId: string;
+ 45 |   developmentBranchId: string;
+ 46 | }): Promise<void> {
+ 47 |   try {
+ 48 |     const neonClient = await getNeonClient();
+ 49 |     await retryOnLocked(
+ 50 |       () =>
+ 51 |         neonClient.restoreProjectBranch(neonProjectId, previewBranchId, {
+ 52 |           source_branch_id: developmentBranchId,
+ 53 |           source_timestamp: dbTimestamp,
+ 54 |         }),
+ 55 |       `Restore preview branch ${previewBranchId} for app ${appId}`,
+ 56 |     );
+ 57 |   } catch (error) {
+ 58 |     const errorMessage = getNeonErrorMessage(error);
+ 59 |     logger.error("Error in restoreBranchForPreview:", errorMessage);
+ 60 |     throw new Error(errorMessage);
+ 61 |   }
+ 62 | }
+ 63 | 
+ 64 | export function registerVersionHandlers() {
+ 65 |   handle("list-versions", async (_, { appId }: { appId: number }) => {
+ 66 |     const app = await db.query.apps.findFirst({
+ 67 |       where: eq(apps.id, appId),
+ 68 |     });
+ 69 | 
+ 70 |     if (!app) {
+ 71 |       // The app might have just been deleted, so we return an empty array.
+ 72 |       return [];
+ 73 |     }
+ 74 | 
+ 75 |     const appPath = getDyadAppPath(app.path);
+ 76 | 
+ 77 |     // Just return an empty array if the app is not a git repo.
+ 78 |     if (!fs.existsSync(path.join(appPath, ".git"))) {
+ 79 |       return [];
+ 80 |     }
+ 81 | 
+ 82 |     const commits = await git.log({
+ 83 |       fs,
+ 84 |       dir: appPath,
+ 85 |       // KEEP UP TO DATE WITH ChatHeader.tsx
+ 86 |       depth: 100_000, // Limit to last 100_000 commits for performance
+ 87 |     });
+ 88 | 
+ 89 |     // Get all snapshots for this app to match with commits
+ 90 |     const appSnapshots = await db.query.versions.findMany({
+ 91 |       where: eq(versions.appId, appId),
+ 92 |     });
+ 93 | 
+ 94 |     // Create a map of commitHash -> snapshot info for quick lookup
+ 95 |     const snapshotMap = new Map<
+ 96 |       string,
+ 97 |       { neonDbTimestamp: string | null; createdAt: Date }
+ 98 |     >();
+ 99 |     for (const snapshot of appSnapshots) {
+100 |       snapshotMap.set(snapshot.commitHash, {
+101 |         neonDbTimestamp: snapshot.neonDbTimestamp,
+102 |         createdAt: snapshot.createdAt,
+103 |       });
+104 |     }
+105 | 
+106 |     return commits.map((commit: ReadCommitResult) => {
+107 |       const snapshotInfo = snapshotMap.get(commit.oid);
+108 |       return {
+109 |         oid: commit.oid,
+110 |         message: commit.commit.message,
+111 |         timestamp: commit.commit.author.timestamp,
+112 |         dbTimestamp: snapshotInfo?.neonDbTimestamp,
+113 |       };
+114 |     }) satisfies Version[];
+115 |   });
+116 | 
+117 |   handle(
+118 |     "get-current-branch",
+119 |     async (_, { appId }: { appId: number }): Promise<BranchResult> => {
+120 |       const app = await db.query.apps.findFirst({
+121 |         where: eq(apps.id, appId),
+122 |       });
+123 | 
+124 |       if (!app) {
+125 |         throw new Error("App not found");
+126 |       }
+127 | 
+128 |       const appPath = getDyadAppPath(app.path);
+129 | 
+130 |       // Return appropriate result if the app is not a git repo
+131 |       if (!fs.existsSync(path.join(appPath, ".git"))) {
+132 |         throw new Error("Not a git repository");
+133 |       }
+134 | 
+135 |       try {
+136 |         const currentBranch = await git.currentBranch({
+137 |           fs,
+138 |           dir: appPath,
+139 |           fullname: false,
+140 |         });
+141 | 
+142 |         return {
+143 |           branch: currentBranch || "<no-branch>",
+144 |         };
+145 |       } catch (error: any) {
+146 |         logger.error(`Error getting current branch for app ${appId}:`, error);
+147 |         throw new Error(`Failed to get current branch: ${error.message}`);
+148 |       }
+149 |     },
+150 |   );
+151 | 
+152 |   handle(
+153 |     "revert-version",
+154 |     async (
+155 |       _,
+156 |       { appId, previousVersionId }: RevertVersionParams,
+157 |     ): Promise<RevertVersionResponse> => {
+158 |       return withLock(appId, async () => {
+159 |         let successMessage = "Restored version";
+160 |         let warningMessage: string | undefined = undefined;
+161 |         const app = await db.query.apps.findFirst({
+162 |           where: eq(apps.id, appId),
+163 |         });
+164 | 
+165 |         if (!app) {
+166 |           throw new Error("App not found");
+167 |         }
+168 | 
+169 |         const appPath = getDyadAppPath(app.path);
+170 |         // Get the current commit hash before reverting
+171 |         const currentCommitHash = await git.resolveRef({
+172 |           fs,
+173 |           dir: appPath,
+174 |           ref: "main",
+175 |         });
+176 | 
+177 |         await gitCheckout({
+178 |           path: appPath,
+179 |           ref: "main",
+180 |         });
+181 | 
+182 |         if (app.neonProjectId && app.neonDevelopmentBranchId) {
+183 |           // We are going to add a new commit on top, so let's store
+184 |           // the current timestamp at the current version.
+185 |           await storeDbTimestampAtCurrentVersion({
+186 |             appId,
+187 |           });
+188 |         }
+189 | 
+190 |         await gitStageToRevert({
+191 |           path: appPath,
+192 |           targetOid: previousVersionId,
+193 |         });
+194 | 
+195 |         await gitCommit({
+196 |           path: appPath,
+197 |           message: `Reverted all changes back to version ${previousVersionId}`,
+198 |         });
+199 | 
+200 |         // Find the chat and message associated with the commit hash
+201 |         const messageWithCommit = await db.query.messages.findFirst({
+202 |           where: eq(messages.commitHash, previousVersionId),
+203 |           with: {
+204 |             chat: true,
+205 |           },
+206 |         });
+207 | 
+208 |         // If we found a message with this commit hash, delete all subsequent messages (but keep this message)
+209 |         if (messageWithCommit) {
+210 |           const chatId = messageWithCommit.chatId;
+211 | 
+212 |           // Find all messages in this chat with IDs > the one with our commit hash
+213 |           const messagesToDelete = await db.query.messages.findMany({
+214 |             where: and(
+215 |               eq(messages.chatId, chatId),
+216 |               gt(messages.id, messageWithCommit.id),
+217 |             ),
+218 |             orderBy: desc(messages.id),
+219 |           });
+220 | 
+221 |           logger.log(
+222 |             `Deleting ${messagesToDelete.length} messages after commit ${previousVersionId} from chat ${chatId}`,
+223 |           );
+224 | 
+225 |           // Delete the messages
+226 |           if (messagesToDelete.length > 0) {
+227 |             await db
+228 |               .delete(messages)
+229 |               .where(
+230 |                 and(
+231 |                   eq(messages.chatId, chatId),
+232 |                   gt(messages.id, messageWithCommit.id),
+233 |                 ),
+234 |               );
+235 |           }
+236 |         }
+237 | 
+238 |         if (app.neonProjectId && app.neonDevelopmentBranchId) {
+239 |           const version = await db.query.versions.findFirst({
+240 |             where: and(
+241 |               eq(versions.appId, appId),
+242 |               eq(versions.commitHash, previousVersionId),
+243 |             ),
+244 |           });
+245 |           if (version && version.neonDbTimestamp) {
+246 |             try {
+247 |               const preserveBranchName = `preserve_${currentCommitHash}-${Date.now()}`;
+248 |               const neonClient = await getNeonClient();
+249 |               const response = await retryOnLocked(
+250 |                 () =>
+251 |                   neonClient.restoreProjectBranch(
+252 |                     app.neonProjectId!,
+253 |                     app.neonDevelopmentBranchId!,
+254 |                     {
+255 |                       source_branch_id: app.neonDevelopmentBranchId!,
+256 |                       source_timestamp: version.neonDbTimestamp!,
+257 |                       preserve_under_name: preserveBranchName,
+258 |                     },
+259 |                   ),
+260 |                 `Restore development branch ${app.neonDevelopmentBranchId} for app ${appId}`,
+261 |               );
+262 |               // Update all versions which have a newer DB timestamp than the version we're restoring to
+263 |               // and remove their DB timestamp.
+264 |               await db
+265 |                 .update(versions)
+266 |                 .set({ neonDbTimestamp: null })
+267 |                 .where(
+268 |                   and(
+269 |                     eq(versions.appId, appId),
+270 |                     gt(versions.neonDbTimestamp, version.neonDbTimestamp),
+271 |                   ),
+272 |                 );
+273 | 
+274 |               const preserveBranchId = response.data.branch.parent_id;
+275 |               if (!preserveBranchId) {
+276 |                 throw new Error("Preserve branch ID not found");
+277 |               }
+278 |               logger.info(
+279 |                 `Deleting preserve branch ${preserveBranchId} for app ${appId}`,
+280 |               );
+281 |               try {
+282 |                 // Intentionally do not await this because it's not
+283 |                 // critical for the restore operation, it's to clean up branches
+284 |                 // so the user doesn't hit the branch limit later.
+285 |                 retryOnLocked(
+286 |                   () =>
+287 |                     neonClient.deleteProjectBranch(
+288 |                       app.neonProjectId!,
+289 |                       preserveBranchId,
+290 |                     ),
+291 |                   `Delete preserve branch ${preserveBranchId} for app ${appId}`,
+292 |                   { retryBranchWithChildError: true },
+293 |                 );
+294 |               } catch (error) {
+295 |                 const errorMessage = getNeonErrorMessage(error);
+296 |                 logger.error("Error in deleteProjectBranch:", errorMessage);
+297 |               }
+298 |             } catch (error) {
+299 |               const errorMessage = getNeonErrorMessage(error);
+300 |               logger.error("Error in restoreBranchForCheckout:", errorMessage);
+301 |               warningMessage = `Could not restore database because of error: ${errorMessage}`;
+302 |               // Do not throw, so we can finish switching the postgres branch
+303 |               // It might throw because they picked a timestamp that's too old.
+304 |             }
+305 |             successMessage =
+306 |               "Successfully restored to version (including database)";
+307 |           }
+308 |           await switchPostgresToDevelopmentBranch({
+309 |             neonProjectId: app.neonProjectId,
+310 |             neonDevelopmentBranchId: app.neonDevelopmentBranchId,
+311 |             appPath: app.path,
+312 |           });
+313 |         }
+314 |         if (warningMessage) {
+315 |           return { warningMessage };
+316 |         }
+317 |         return { successMessage };
+318 |       });
+319 |     },
+320 |   );
+321 | 
+322 |   handle(
+323 |     "checkout-version",
+324 |     async (
+325 |       _,
+326 |       { appId, versionId: gitRef }: { appId: number; versionId: string },
+327 |     ): Promise<void> => {
+328 |       return withLock(appId, async () => {
+329 |         const app = await db.query.apps.findFirst({
+330 |           where: eq(apps.id, appId),
+331 |         });
+332 | 
+333 |         if (!app) {
+334 |           throw new Error("App not found");
+335 |         }
+336 | 
+337 |         if (
+338 |           app.neonProjectId &&
+339 |           app.neonDevelopmentBranchId &&
+340 |           app.neonPreviewBranchId
+341 |         ) {
+342 |           if (gitRef === "main") {
+343 |             logger.info(
+344 |               `Switching Postgres to development branch for app ${appId}`,
+345 |             );
+346 |             await switchPostgresToDevelopmentBranch({
+347 |               neonProjectId: app.neonProjectId,
+348 |               neonDevelopmentBranchId: app.neonDevelopmentBranchId,
+349 |               appPath: app.path,
+350 |             });
+351 |           } else {
+352 |             logger.info(
+353 |               `Switching Postgres to preview branch for app ${appId}`,
+354 |             );
+355 | 
+356 |             // Regardless of whether we have a timestamp or not, we want to disable DB push
+357 |             // while we're checking out an earlier version
+358 |             await updateDbPushEnvVar({
+359 |               appPath: app.path,
+360 |               disabled: true,
+361 |             });
+362 | 
+363 |             const version = await db.query.versions.findFirst({
+364 |               where: and(
+365 |                 eq(versions.appId, appId),
+366 |                 eq(versions.commitHash, gitRef),
+367 |               ),
+368 |             });
+369 | 
+370 |             if (version && version.neonDbTimestamp) {
+371 |               // SWITCH the env var for POSTGRES_URL to the preview branch
+372 |               const neonClient = await getNeonClient();
+373 |               const connectionUri = await neonClient.getConnectionUri({
+374 |                 projectId: app.neonProjectId,
+375 |                 branch_id: app.neonPreviewBranchId,
+376 |                 // This is the default database name for Neon
+377 |                 database_name: "neondb",
+378 |                 // This is the default role name for Neon
+379 |                 role_name: "neondb_owner",
+380 |               });
+381 | 
+382 |               await restoreBranchForPreview({
+383 |                 appId,
+384 |                 dbTimestamp: version.neonDbTimestamp,
+385 |                 neonProjectId: app.neonProjectId,
+386 |                 previewBranchId: app.neonPreviewBranchId,
+387 |                 developmentBranchId: app.neonDevelopmentBranchId,
+388 |               });
+389 | 
+390 |               await updatePostgresUrlEnvVar({
+391 |                 appPath: app.path,
+392 |                 connectionUri: connectionUri.data.uri,
+393 |               });
+394 |               logger.info(
+395 |                 `Switched Postgres to preview branch for app ${appId} commit ${version.commitHash} dbTimestamp=${version.neonDbTimestamp}`,
+396 |               );
+397 |             }
+398 |           }
+399 |         }
+400 |         const fullAppPath = getDyadAppPath(app.path);
+401 |         await gitCheckout({
+402 |           path: fullAppPath,
+403 |           ref: gitRef,
+404 |         });
+405 |       });
+406 |     },
+407 |   );
+408 | }
+409 | 
+410 | async function switchPostgresToDevelopmentBranch({
+411 |   neonProjectId,
+412 |   neonDevelopmentBranchId,
+413 |   appPath,
+414 | }: {
+415 |   neonProjectId: string;
+416 |   neonDevelopmentBranchId: string;
+417 |   appPath: string;
+418 | }) {
+419 |   // SWITCH the env var for POSTGRES_URL to the development branch
+420 |   const neonClient = await getNeonClient();
+421 |   const connectionUri = await neonClient.getConnectionUri({
+422 |     projectId: neonProjectId,
+423 |     branch_id: neonDevelopmentBranchId,
+424 |     // This is the default database name for Neon
+425 |     database_name: "neondb",
+426 |     // This is the default role name for Neon
+427 |     role_name: "neondb_owner",
+428 |   });
+429 | 
+430 |   await updatePostgresUrlEnvVar({
+431 |     appPath,
+432 |     connectionUri: connectionUri.data.uri,
+433 |   });
+434 | 
+435 |   await updateDbPushEnvVar({
+436 |     appPath,
+437 |     disabled: false,
+438 |   });
+439 | }
+440 | 
