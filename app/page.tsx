@@ -30,27 +30,37 @@ export default function Home() {
 
   const refreshFiles = useCallback(async () => {
     try {
-      console.log("[v0] Refreshing files from static tree...")
-      const files = convertStaticTreeToFileNodes(algorandBoltFileTree)
-
-      // Extract file contents from the static tree
+      console.log("[v0] Refreshing files from WebContainer...")
+      const { WebContainerService } = await import("@/lib/webcontainer")
+      const webcontainer = WebContainerService.getInstance()
+      const tree = await webcontainer.getFileTree()
+      
+      // Convert tree format and read file contents
+      const convertedTree: any = {}
       const contents: Record<string, string> = {}
-      const extractContents = (tree: any, path = "") => {
+      
+      const processTree = async (tree: any, path = "", targetTree: any) => {
         for (const [name, item] of Object.entries(tree)) {
           const fullPath = path ? `${path}/${name}` : name
-          if ("file" in item) {
-            contents[fullPath] = item.file.contents
-          } else if ("directory" in item) {
-            extractContents(item.directory, fullPath)
+          
+          if (item.type === "directory") {
+            targetTree[name] = { directory: {} }
+            await processTree(item.children, fullPath, targetTree[name].directory)
+          } else {
+            const content = await webcontainer.readFile(fullPath)
+            targetTree[name] = { file: { contents: content } }
+            contents[fullPath] = content
           }
         }
       }
-      extractContents(algorandBoltFileTree)
+      
+      await processTree(tree, "", convertedTree)
+      const files = convertStaticTreeToFileNodes(convertedTree)
 
       setProjectState((prev) => ({ ...prev, files }))
       setFileContents(contents)
 
-      console.log("[v0] Files refreshed from static tree successfully")
+      console.log("[v0] Files refreshed from WebContainer successfully")
     } catch (error) {
       console.error("[v0] Failed to refresh files:", error)
     }
@@ -127,96 +137,10 @@ export default function Home() {
     initializeProject()
   }, [])
 
-  const handleCodeGenerated = useCallback(
-    async (code: string, filename: string) => {
-      console.log("[v0] Generated code:", { code, filename })
-
-      try {
-        let filePath = filename
-
-        if (!filename.includes("/")) {
-          if (
-            filename.endsWith(".jsx") ||
-            filename.endsWith(".tsx") ||
-            filename.endsWith(".js") ||
-            filename.endsWith(".ts")
-          ) {
-            if (
-              code.includes("export default") &&
-              (code.includes("function") || code.includes("const") || code.includes("class"))
-            ) {
-              filePath = `src/components/${filename}`
-            } else {
-              filePath = `src/${filename}`
-            }
-          } else if (filename.endsWith(".css") || filename.endsWith(".scss")) {
-            filePath = `src/styles/${filename}`
-          } else if (filename.endsWith(".json")) {
-            filePath = filename
-          } else {
-            filePath = `src/${filename}`
-          }
-        }
-
-        // Update file contents
-        setFileContents((prev) => ({ ...prev, [filePath]: code }))
-
-        try {
-          const { WebContainerService } = await import("@/lib/webcontainer")
-          const webcontainer = WebContainerService.getInstance()
-          await webcontainer.writeFile(filePath, code)
-          console.log(`[v0] File synced to WebContainer: ${filePath}`)
-        } catch (error) {
-          console.warn(`[v0] Failed to sync file to WebContainer: ${error}`)
-        }
-
-        // Update file tree if it's a new file
-        if (!fileContents[filePath]) {
-          const updatedContents = { ...fileContents, [filePath]: code }
-          const files = convertStaticTreeToFileNodes(algorandBoltFileTree)
-          setProjectState((prev) => ({ ...prev, files }))
-        }
-
-        setProjectState((prev) => ({
-          ...prev,
-          activeFile: filePath,
-          terminal: {
-            ...prev.terminal,
-            history: [
-              ...prev.terminal.history,
-              {
-                id: Date.now().toString(),
-                type: "success" as const,
-                content: `✅ Generated and applied: ${filePath}`,
-                timestamp: new Date(),
-              },
-            ],
-          },
-        }))
-
-        console.log(`[v0] Code applied to ${filePath}`)
-      } catch (error) {
-        console.error("[v0] Failed to write generated code:", error)
-
-        setProjectState((prev) => ({
-          ...prev,
-          terminal: {
-            ...prev.terminal,
-            history: [
-              ...prev.terminal.history,
-              {
-                id: Date.now().toString(),
-                type: "error" as const,
-                content: `❌ Failed to apply code to ${filename}: ${error.message}`,
-                timestamp: new Date(),
-              },
-            ],
-          },
-        }))
-      }
-    },
-    [fileContents],
-  )
+  const handleCodeGenerated = useCallback(async () => {
+    console.log("[v0] Refreshing after code generation")
+    await refreshFiles()
+  }, [refreshFiles])
 
   const handleFileSelect = useCallback(async (path: string) => {
     setProjectState((prev) => ({ ...prev, activeFile: path }))

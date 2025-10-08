@@ -594,4 +594,46 @@ body {
       throw error
     }
   }
+
+  async deleteFile(path: string): Promise<void> {
+    if (!this.webcontainer) await this.boot()
+    try {
+      await this.webcontainer!.fs.rm(path, { recursive: true })
+      console.log(`[v0] File deleted: ${path}`)
+    } catch (error) {
+      console.error(`[v0] Failed to delete ${path}:`, error)
+      throw error
+    }
+  }
+
+  async installPackage(packageName: string): Promise<void> {
+    if (!this.webcontainer) await this.boot()
+    
+    console.log(`[v0] Installing package: ${packageName}`)
+    const process = await this.webcontainer!.spawn('npm', [
+      'install',
+      packageName,
+      '--save',
+      '--legacy-peer-deps'
+    ])
+    
+    return new Promise((resolve, reject) => {
+      process.output.pipeTo(
+        new WritableStream({
+          write(data) {
+            console.log(`[v0] npm install ${packageName}:`, data)
+          },
+        }),
+      )
+
+      process.exit.then((code) => {
+        if (code === 0) {
+          console.log(`[v0] Package installed: ${packageName}`)
+          resolve()
+        } else {
+          reject(new Error(`Failed to install ${packageName}`))
+        }
+      })
+    })
+  }
 }

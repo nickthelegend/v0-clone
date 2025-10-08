@@ -1,9 +1,10 @@
 import { streamText } from "ai"
-import { mistral } from "@ai-sdk/mistral"
+import { openai } from "@ai-sdk/openai"
+import { SYSTEM_PROMPT } from "@/lib/prompts/system-prompt"
 
 export async function POST(req: Request) {
   try {
-    const { messages, agent } = await req.json()
+    const { messages, agent, fileTree, fileContents } = await req.json()
 
     console.log("[v0] Chat API called with agent:", agent)
 
@@ -46,21 +47,11 @@ export async function POST(req: Request) {
       })
     }
 
-    // Default agent behavior
+    // Default agent behavior with AlgoCraft system prompt
     const result = await streamText({
-      model: mistral("mistral-large-latest"),
+      model: openai("gpt-3.5-turbo"),  // Cheapest option for testing
       messages,
-      system: `You are an expert full-stack developer and AI assistant. You help users build web applications by generating clean, modern code using React, Next.js, TypeScript, and Tailwind CSS.
-
-When generating code:
-- Always use TypeScript
-- Use modern React patterns (hooks, functional components)
-- Apply Tailwind CSS for styling
-- Include proper error handling
-- Write clean, readable code with comments
-- Follow best practices for performance and accessibility
-
-Format your responses with clear explanations and well-structured code blocks.`,
+      system: SYSTEM_PROMPT,
     })
 
     return result.toTextStreamResponse()
