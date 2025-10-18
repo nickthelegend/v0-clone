@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
 import "./globals.css"
+import { WalletProvider } from "@/components/wallet-provider"
 
 export const metadata: Metadata = {
   title: "Algokit IDE",
@@ -26,7 +27,11 @@ html {
 }
         `}</style>
       </head>
-      <body>{children}</body>
+      <body>
+        <WalletProvider>
+          {children}
+        </WalletProvider>
+      </body>
     </html>
   )
 }

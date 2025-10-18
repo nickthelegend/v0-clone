@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Check, ArrowLeft } from "lucide-react"
+import { useWallet } from "@/components/wallet-provider"
 
 interface Plan {
   id: string
@@ -16,28 +17,37 @@ interface Plan {
 
 export default function PricingPage() {
   const router = useRouter()
+  const { address, isConnected } = useWallet()
   const [plans, setPlans] = useState<Plan[]>([])
   const [loading, setLoading] = useState(true)
-  const [user, setUser] = useState<any>(null)
+  const [userTokens, setUserTokens] = useState<number>(0)
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
-    if (userData) {
-      setUser(JSON.parse(userData))
-    }
-
+    // Fetch plans
     fetch("/api/pricing")
       .then((res) => res.json())
       .then((data) => {
         setPlans(data.plans)
         setLoading(false)
       })
-  }, [])
+
+    // Fetch user tokens if wallet is connected
+    if (isConnected && address) {
+      fetch(`/api/user?walletAddress=${address}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.user) {
+            setUserTokens(data.user.tokens)
+          }
+        })
+        .catch(console.error)
+    }
+  }, [address, isConnected])
 
   const handlePurchase = async (planId: string) => {
-    if (!user) {
-      router.push("/login")
+    if (!isConnected || !address) {
+      alert("Please connect your wallet first")
       return
     }
 
@@ -45,13 +55,12 @@ export default function PricingPage() {
       const res = await fetch("/api/pricing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id, planId }),
+        body: JSON.stringify({ walletAddress: address, planId }),
       })
 
       const data = await res.json()
       if (res.ok) {
-        localStorage.setItem("user", JSON.stringify(data.user))
-        setUser(data.user)
+        setUserTokens(data.user.tokens)
         alert(`Success! ${data.user.tokens} tokens added to your account!`)
       }
     } catch (err) {
@@ -65,8 +74,8 @@ export default function PricingPage() {
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-white mb-4">Choose Your Plan</h1>
           <p className="text-zinc-400">Get tokens to power your AI development</p>
-          {user && (
-            <p className="text-green-500 mt-2">Current Balance: {user.tokens} tokens</p>
+          {isConnected && address && (
+            <p className="text-green-500 mt-2">Current Balance: {userTokens} tokens</p>
           )}
         </div>
 

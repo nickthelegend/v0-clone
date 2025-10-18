@@ -30,6 +30,16 @@ async function main() {
     ],
   })
 
+  // Create a test user with wallet address for development
+  await prisma.user.upsert({
+    where: { walletAddress: 'test-wallet-address-123' },
+    update: {},
+    create: {
+      walletAddress: 'test-wallet-address-123',
+      tokens: 1000,
+    },
+  })
+
   console.log('✅ Seed data created successfully')
 }
 

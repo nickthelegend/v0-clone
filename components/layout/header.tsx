@@ -1,118 +1,77 @@
 "use client"
 
-import { Play, Square, Settings, Download, Share, Coins, User, LogOut, LayoutDashboard } from "lucide-react"
+import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useRouter } from "next/navigation"
-import { useState, useEffect } from "react"
+import { useRouter, usePathname } from "next/navigation"
+import { ConnectWalletButton } from "@/components/connect-wallet-button"
+import { useWallet } from "@/components/wallet-provider"
 
 interface HeaderProps {
-  isRunning: boolean
-  onRun: () => void
-  onStop: () => void
-  projectName?: string
-  onDownload?: () => void
 }
 
-export default function Header({ isRunning, onRun, onStop, projectName = "My Project", onDownload }: HeaderProps) {
+export default function Header({}: HeaderProps) {
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
+  const pathname = usePathname()
+  const { isConnected } = useWallet()
 
-  useEffect(() => {
-    const userData = localStorage.getItem("user")
-    if (userData) {
-      setUser(JSON.parse(userData))
+  const isActiveTab = (tab: string) => {
+    if (tab === "agents") {
+      return pathname === "/" || pathname?.includes("/agents")
     }
-  }, [])
-
-  const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" })
-    localStorage.removeItem("user")
-    document.cookie = "user=; path=/; max-age=0"
-    setUser(null)
-    router.push("/login")
+    return pathname?.includes(tab)
   }
-  return (
-    <div className="h-12 bg-zinc-900 border-b border-zinc-800 flex items-center justify-between px-4">
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-500"></div>
-            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-            <div className="w-3 h-3 rounded-full bg-green-500"></div>
-          </div>
-          <h1 className="text-lg font-semibold text-white">Algokit IDE</h1>
-        </div>
-        <div className="flex items-center gap-2">
-          {isRunning ? (
-            <Button onClick={onStop} size="sm" variant="destructive" className="h-8">
-              <Square className="w-3 h-3 mr-1" />
-              Stop
-            </Button>
-          ) : (
-            <Button onClick={onRun} size="sm" className="h-8 bg-green-600 hover:bg-green-700">
-              <Play className="w-3 h-3 mr-1" />
-              Run
-            </Button>
-          )}
-        </div>
-      </div>
 
-      <div className="flex items-center gap-2">
-        {user ? (
-          <>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 text-zinc-400 hover:text-white"
-              onClick={() => router.push("/pricing")}
-            >
-              <Coins className="w-4 h-4 mr-1" />
-              {user.tokens} tokens
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 text-zinc-400 hover:text-white"
-              onClick={() => router.push("/dashboard")}
-              title="Dashboard"
-            >
-              <LayoutDashboard className="w-4 h-4" />
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 text-zinc-400 hover:text-white"
-              onClick={handleLogout}
-            >
-              <LogOut className="w-4 h-4" />
-            </Button>
-          </>
-        ) : (
+  const showBackButton = () => {
+    return pathname === "/dashboard" || pathname?.startsWith("/dashboard/")
+  }
+
+  return (
+    <div className="h-12 bg-zinc-950 border-b border-zinc-800 flex items-center justify-between px-6">
+      <div className="flex items-center gap-4">
+        {showBackButton() && (
           <Button
             size="sm"
-            variant="default"
-            className="h-8"
-            onClick={() => router.push("/login")}
+            variant="ghost"
+            className="h-8 w-8 p-0 text-zinc-400 hover:text-white"
+            onClick={() => router.push("/")}
           >
-            Login
+            <ArrowLeft className="w-4 h-4" />
           </Button>
         )}
-        <Button size="sm" variant="ghost" className="h-8 text-zinc-400 hover:text-white">
-          <Share className="w-4 h-4" />
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-8 text-zinc-400 hover:text-white"
-          onClick={onDownload}
-          title="Download project as ZIP"
-        >
-          <Download className="w-4 h-4" />
-        </Button>
-        <Button size="sm" variant="ghost" className="h-8 text-zinc-400 hover:text-white">
-          <Settings className="w-4 h-4" />
-        </Button>
+
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded-full bg-red-500"></div>
+          <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+          <div className="w-3 h-3 rounded-full bg-green-500"></div>
+        </div>
+
+        <div className="flex items-center gap-6">
+          <button
+            onClick={() => router.push("/")}
+            className={`text-sm font-medium transition-colors ${
+              isActiveTab("agents")
+                ? "text-white"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            Agents
+          </button>
+          <button
+            onClick={() => router.push("/dashboard")}
+            className={`text-sm font-medium transition-colors ${
+              isActiveTab("dashboard")
+                ? "text-white"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            Dashboard
+          </button>
+        </div>
       </div>
+
+     <div className="flex items-center gap-3">
+       <ConnectWalletButton />
+     </div>
     </div>
   )
 }

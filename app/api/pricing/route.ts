@@ -12,21 +12,26 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const { userId, planId } = await req.json()
+    const { walletAddress, planId } = await req.json()
 
     const plan = await prisma.plan.findUnique({ where: { id: planId } })
     if (!plan) {
       return NextResponse.json({ error: 'Plan not found' }, { status: 404 })
     }
 
-    const user = await prisma.user.update({
-      where: { id: userId },
-      data: { tokens: { increment: plan.tokens } }
+    // Update or create user based on wallet address
+    const user = await prisma.user.upsert({
+      where: { walletAddress },
+      update: { tokens: { increment: plan.tokens } },
+      create: {
+        walletAddress,
+        tokens: plan.tokens
+      }
     })
 
     await prisma.purchase.create({
       data: {
-        userId,
+        walletAddress,
         planId,
         tokens: plan.tokens,
         amount: plan.price,
@@ -34,7 +39,7 @@ export async function POST(req: Request) {
       }
     })
 
-    return NextResponse.json({ user: { id: user.id, email: user.email, tokens: user.tokens } })
+    return NextResponse.json({ user: { id: user.id, walletAddress: user.walletAddress, tokens: user.tokens } })
   } catch (error) {
     return NextResponse.json({ error: 'Purchase failed' }, { status: 500 })
   }
