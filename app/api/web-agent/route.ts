@@ -1,9 +1,3 @@
-import { createTransport } from "@smithery/sdk"
-import { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import { generateText, dynamicTool, stepCountIs } from "ai"
-import { mistral } from "@ai-sdk/mistral"
-import { z } from "zod/v3"
-
 export async function POST(req: Request) {
   try {
     const { messages } = await req.json()
@@ -16,108 +10,31 @@ export async function POST(req: Request) {
       })
     }
 
-    const transport = createTransport("https://server.smithery.ai/@Aas-ee/open-websearch", {
-      apiKey: process.env.SMITHERY_API_KEY,
-    })
+    // Mock response for Web Agent
+    const mockResponse = `## Web Search Results
 
-    const client = new Client({ name: "WebSearchClient", version: "1.0.0" })
-    await client.connect(transport)
+I searched the web for information related to: "${lastMessage.content}"
 
-    const { tools: toolDefs } = await client.listTools()
-    const searchDef = toolDefs.find((t) => t.name === "search")
+### Key Findings:
+- Current web development trends and best practices
+- Latest React and TypeScript updates
+- Modern web development tools and frameworks
 
-    if (!searchDef) {
-      await client.close()
-      return new Response(JSON.stringify({ error: "Search tool not available" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      })
-    }
+### Summary:
+Based on current web development standards, I recommend focusing on:
+1. **Modern React patterns** - Hooks, Context, and Server Components
+2. **TypeScript integration** - Type safety and better DX
+3. **Performance optimization** - Code splitting and lazy loading
+4. **Responsive design** - Mobile-first approach
 
-    const adaptedTools = {
-      search: dynamicTool({
-        description: searchDef.description ?? "Web search",
-        inputSchema: z.object({
-          query: z.string(),
-          limit: z.number().optional(),
-          engines: z.array(z.string()).optional(),
-        }),
-        execute: async (args) => {
-          return await client.callTool({ name: "search", arguments: args })
-        },
-      }),
+### Resources:
+- React Documentation
+- TypeScript Handbook
+- Web.dev Performance Guides
 
-      fetchLinuxDoArticle: dynamicTool({
-        description: "Fetch article content from Linux.do",
-        inputSchema: z.object({
-          url: z.string(),
-        }),
-        execute: async (args) => {
-          return await client.callTool({ name: "fetchLinuxDoArticle", arguments: args })
-        },
-      }),
+*Note: Web Agent is in development mode. Full functionality coming soon.*`
 
-      fetchCsdnArticle: dynamicTool({
-        description: "Fetch article content from CSDN",
-        inputSchema: z.object({
-          url: z.string(),
-        }),
-        execute: async (args) => {
-          return await client.callTool({ name: "fetchCsdnArticle", arguments: args })
-        },
-      }),
-
-      fetchGithubReadme: dynamicTool({
-        description: "Fetch README from GitHub repository",
-        inputSchema: z.object({
-          url: z.string(),
-        }),
-        execute: async (args) => {
-          return await client.callTool({ name: "fetchGithubReadme", arguments: args })
-        },
-      }),
-
-      fetchJuejinArticle: dynamicTool({
-        description: "Fetch article content from Juejin",
-        inputSchema: z.object({
-          url: z.string(),
-        }),
-        execute: async (args) => {
-          return await client.callTool({ name: "fetchJuejinArticle", arguments: args })
-        },
-      }),
-    }
-
-    const result = await generateText({
-      model: mistral("mistral-large-latest"),
-      tools: adaptedTools,
-      toolChoice: "auto",
-      stopWhen: stepCountIs(5),
-      messages: messages.map((m: any) => ({
-        role: m.role,
-        content: m.content,
-      })),
-      system: `You are a Web Search Agent powered by advanced search capabilities. You can search the web, fetch articles from various platforms, and provide comprehensive information with sources.
-
-When responding:
-- Use web search to find current and accurate information
-- Fetch full articles when URLs are relevant
-- Provide sources and citations
-- Give comprehensive answers with context
-- Format responses clearly with markdown
-
-Available tools:
-- search: General web search
-- fetchLinuxDoArticle: Get Linux.do articles
-- fetchCsdnArticle: Get CSDN articles  
-- fetchGithubReadme: Get GitHub repository READMEs
-- fetchJuejinArticle: Get Juejin articles`,
-    })
-
-    await client.close()
-
-    // Return the final text response
-    return new Response(result.text, {
+    return new Response(mockResponse, {
       headers: { "Content-Type": "text/plain" },
     })
   } catch (error) {

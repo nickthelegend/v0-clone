@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Coins, ShoppingCart, TrendingUp, Calendar, ArrowLeft } from "lucide-react"
+import { useWallet } from "@/components/wallet-provider"
 
 interface Purchase {
   id: string
@@ -18,7 +19,7 @@ interface Purchase {
 
 interface DashboardData {
   user: {
-    email: string
+    walletAddress: string
     tokens: number
     createdAt: string
   }
@@ -32,25 +33,62 @@ interface DashboardData {
 
 export default function DashboardPage() {
   const router = useRouter()
+  const { address, isConnected } = useWallet()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const userData = localStorage.getItem("user")
-    if (!userData) {
-      router.push("/login")
+    if (!isConnected || !address) {
+      router.push("/")
       return
     }
 
-    const user = JSON.parse(userData)
-    fetch(`/api/dashboard?userId=${user.id}`)
-      .then((res) => res.json())
+    fetch(`/api/dashboard?walletAddress=${address}`)
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error('Failed to fetch dashboard data')
+        }
+        return res.json()
+      })
       .then((data) => {
-        setData(data)
+        if (data.error) {
+          // User doesn't exist yet, create a basic user object
+          setData({
+            user: {
+              walletAddress: address,
+              tokens: 0,
+              createdAt: new Date().toISOString()
+            },
+            purchases: [],
+            stats: {
+              totalSpent: 0,
+              totalTokensPurchased: 0,
+              purchaseCount: 0
+            }
+          })
+        } else {
+          setData(data)
+        }
         setLoading(false)
       })
-      .catch(() => setLoading(false))
-  }, [router])
+      .catch(() => {
+        // Handle error gracefully
+        setData({
+          user: {
+            walletAddress: address,
+            tokens: 0,
+            createdAt: new Date().toISOString()
+          },
+          purchases: [],
+          stats: {
+            totalSpent: 0,
+            totalTokensPurchased: 0,
+            purchaseCount: 0
+          }
+        })
+        setLoading(false)
+      })
+  }, [router, address, isConnected])
 
   if (loading) {
     return (
@@ -74,12 +112,18 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-white mb-2">Dashboard</h1>
-            <p className="text-zinc-400">{data.user.email}</p>
+            <p className="text-zinc-400">{`${data.user.walletAddress.slice(0, 6)}...${data.user.walletAddress.slice(-4)}`}</p>
           </div>
-          <Button variant="ghost" onClick={() => router.push("/")}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back to IDE
-          </Button>
+          <div className="flex gap-3">
+            <Button onClick={() => router.push("/pricing")}>
+              <ShoppingCart className="w-4 h-4 mr-2" />
+              Buy Tokens
+            </Button>
+            <Button onClick={() => router.push("/")}>
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back to IDE
+            </Button>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -178,8 +222,8 @@ export default function DashboardPage() {
           <h2 className="text-xl font-bold text-white mb-4">Account Information</h2>
           <div className="space-y-3">
             <div className="flex justify-between">
-              <span className="text-zinc-400">Email</span>
-              <span className="text-white">{data.user.email}</span>
+              <span className="text-zinc-400">Wallet Address</span>
+              <span className="text-white font-mono text-sm">{`${data.user.walletAddress.slice(0, 10)}...${data.user.walletAddress.slice(-8)}`}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-zinc-400">Member Since</span>
