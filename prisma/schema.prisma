@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  password  String
+  tokens    Int        @default(100)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  purchases Purchase[]
+
+  @@map("users")
+}
+
+model Plan {
+  id          String     @id @default(cuid())
+  name        String
+  tokens      Int
+  price       Float
+  description String?
+  popular     Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  purchases   Purchase[]
+
+  @@map("plans")
+}
+
+model Purchase {
+  id        String   @id @default(cuid())
+  userId    String
+  planId    String
+  tokens    Int
+  amount    Float
+  status    String   @default("completed")
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  plan      Plan     @relation(fields: [planId], references: [id])
+
+  @@map("purchases")
+}
