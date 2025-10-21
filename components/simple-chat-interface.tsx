@@ -9,6 +9,7 @@ import type { Message } from "@/lib/types"
 
 interface SimpleChatInterfaceProps {
   onPromptSubmit?: (prompt: string) => void
+  isWalletConnected?: boolean
 }
 
 interface MessageWithFiles extends Message {
@@ -16,7 +17,8 @@ interface MessageWithFiles extends Message {
 }
 
 export default function SimpleChatInterface({
-  onPromptSubmit
+  onPromptSubmit,
+  isWalletConnected = false
 }: SimpleChatInterfaceProps) {
   const [messages, setMessages] = useState<MessageWithFiles[]>([
     {
@@ -37,7 +39,7 @@ export default function SimpleChatInterface({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!input.trim() || isLoading) return
+    if (!input.trim() || isLoading || !isWalletConnected) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -87,10 +89,11 @@ export default function SimpleChatInterface({
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask AI to build, fix bugs, explore"
+                  placeholder={isWalletConnected ? "Ask AI to build, fix bugs, explore" : "Connect wallet to start coding..."}
                   className="w-full bg-transparent border-0 resize-none p-4 text-white placeholder-zinc-400 focus:outline-none focus:ring-0"
                   rows={1}
                   style={{ minHeight: '56px' }}
+                  disabled={!isWalletConnected}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
@@ -108,7 +111,7 @@ export default function SimpleChatInterface({
                     </div>
                   </div>
 
-                  <Button type="submit" size="sm" disabled={!input.trim() || isLoading} className="h-8 w-8 p-0 bg-white text-black hover:bg-zinc-200 disabled:opacity-50">
+                  <Button type="submit" size="sm" disabled={!input.trim() || isLoading || !isWalletConnected} className="h-8 w-8 p-0 bg-white text-black hover:bg-zinc-200 disabled:opacity-50">
                     <Send className="w-4 h-4" />
                   </Button>
                 </div>
@@ -213,12 +216,12 @@ export default function SimpleChatInterface({
           <form onSubmit={handleSubmit} className="relative">
             <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-2xl blur-xl"></div>
             <div className="relative bg-zinc-900/50 backdrop-blur-sm border border-zinc-700 rounded-2xl p-1">
-              <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder="Ask AI to build, fix bugs, explore" className="w-full bg-transparent border-0 resize-none p-4 text-white placeholder-zinc-400 focus:outline-none focus:ring-0" rows={1} style={{ minHeight: '56px' }} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e) } }} />
+              <textarea value={input} onChange={(e) => setInput(e.target.value)} placeholder={isWalletConnected ? "Ask AI to build, fix bugs, explore" : "Connect wallet to start coding..."} className="w-full bg-transparent border-0 resize-none p-4 text-white placeholder-zinc-400 focus:outline-none focus:ring-0" rows={1} style={{ minHeight: '56px' }} disabled={!isWalletConnected} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e) } }} />
               <div className="flex items-center justify-between px-4 pb-2">
                 <div className="h-8 px-3 text-zinc-400 flex items-center gap-2">
                   <Sparkles className="w-4 h-4" />{selectedModel}
                 </div>
-                <Button type="submit" size="sm" disabled={!input.trim() || isLoading} className="h-8 w-8 p-0 bg-white text-black hover:bg-zinc-200 disabled:opacity-50">
+                <Button type="submit" size="sm" disabled={!input.trim() || isLoading || !isWalletConnected} className="h-8 w-8 p-0 bg-white text-black hover:bg-zinc-200 disabled:opacity-50">
                   <Send className="w-4 h-4" />
                 </Button>
               </div>

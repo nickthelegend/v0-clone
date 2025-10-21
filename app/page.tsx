@@ -7,10 +7,12 @@ import AILoadingState from "@/components/ai-loading-state"
 import IDEInterface from "@/components/ide-interface"
 import { TemplateLoader } from "@/lib/template-loader"
 import { WebContainerService } from "@/lib/webcontainer"
+import { useWallet } from "@/components/wallet-provider"
 
 type AppMode = "chat" | "loading" | "ide"
 
 export default function Home() {
+  const { isConnected } = useWallet()
   const [currentMode, setCurrentMode] = useState<AppMode>("chat")
   const [isChatMinimized, setIsChatMinimized] = useState(false)
   const [generatedFiles, setGeneratedFiles] = useState<Record<string, string>>({})
@@ -35,7 +37,7 @@ export default function Home() {
     setProjectStructure(createProjectStructure(newFiles))
   }
 
-  // Initialize with template on mount
+  // Initialize with template on mount (background loading)
   useEffect(() => {
     const initializeTemplate = async () => {
       try {
@@ -46,7 +48,7 @@ export default function Home() {
         })
         setGeneratedFiles(files)
         setProjectStructure(createProjectStructure(files))
-        setCurrentMode("ide")
+        // Stay in chat mode - don't switch to IDE automatically
       } catch (error) {
         console.error('Failed to load template:', error)
       }
@@ -249,6 +251,7 @@ export default function Home() {
             <div className="w-96 flex-shrink-0">
               <SimpleChatInterface
                 onPromptSubmit={handlePromptSubmit}
+                isWalletConnected={isConnected}
               />
             </div>
             <div className="w-px bg-zinc-800 flex-shrink-0"></div>
@@ -261,6 +264,7 @@ export default function Home() {
             <div className="flex-1">
               <SimpleChatInterface
                 onPromptSubmit={handlePromptSubmit}
+                isWalletConnected={isConnected}
               />
             </div>
           )}
