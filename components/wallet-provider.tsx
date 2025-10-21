@@ -38,7 +38,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   // hydrate from localStorage
   useEffect(() => {
     const saved = localStorage.getItem("algokit:wallet:address")
-    if (saved) setAddress(saved)
+    if (saved) {
+      setAddress(saved)
+      // Set user cookie to prevent middleware redirect
+      document.cookie = `user=${JSON.stringify({ walletAddress: saved })}; path=/`
+    }
   }, [])
 
   const connect = useCallback(async () => {
@@ -52,26 +56,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         if (accounts && accounts.length > 0) {
           const addr = accounts[0]
           localStorage.setItem("algokit:wallet:address", addr)
+          // Set user cookie to prevent middleware redirect
+          document.cookie = `user=${JSON.stringify({ walletAddress: addr })}; path=/`
           setAddress(addr)
           router.refresh()
           return
         }
       }
-      // Fallback: simple prompt for a mock address (dev convenience)
-      const mock = prompt("Enter Algorand address (dev/mock):")
-      if (mock && mock.trim()) {
-        localStorage.setItem("algokit:wallet:address", mock.trim())
-        setAddress(mock.trim())
-        router.refresh()
-      }
-    } catch (_) {
-      // swallow and fall back to prompt
-      const mock = prompt("Enter Algorand address (dev/mock):")
-      if (mock && mock.trim()) {
-        localStorage.setItem("algokit:wallet:address", mock.trim())
-        setAddress(mock.trim())
-        router.refresh()
-      }
+      // If Pera is not available, throw error to show proper message
+      throw new Error("Wallet connection failed")
+    } catch (error) {
+      console.error("Wallet connection error:", error)
+      throw error // Re-throw to let the modal handle the error
     } finally {
       setConnecting(false)
     }
@@ -79,6 +75,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
   const disconnect = useCallback(async () => {
     localStorage.removeItem("algokit:wallet:address")
+    // Remove user cookie
+    document.cookie = "user=; path=/; max-age=0"
     setAddress(null)
     router.push("/") // send back home
   }, [router])
