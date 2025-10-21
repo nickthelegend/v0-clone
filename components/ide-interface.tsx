@@ -2,69 +2,44 @@
 
 import { useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Play, Square, Code, Eye, FolderOpen, Plus, Trash2, Download, FileText } from "lucide-react"
+import { Play, Square, Code, Eye, Plus, Download } from "lucide-react"
+import CodeEditor from "@/components/code-editor"
+import PreviewPanel from "@/components/preview-panel"
+import Terminal from "@/components/terminal"
+import FileExplorer from "@/components/file-explorer"
 import type { ProjectState } from "@/lib/types"
 
 interface IDEInterfaceProps {
+  files?: Record<string, string>
+  projectStructure?: any[]
   onRun?: () => void
   onStop?: () => void
   isRunning?: boolean
+  serverUrl?: string | null
+  isInitializing?: boolean
+  onFileChange?: (path: string, content: string) => void
+  onCreateFile?: (name: string) => void
+  onDeleteFile?: (path: string) => void
 }
 
-export default function IDEInterface({ onRun, onStop, isRunning }: IDEInterfaceProps) {
+export default function IDEInterface({ files = {}, projectStructure = [], onRun, onStop, isRunning, serverUrl, isInitializing, onFileChange: onFileChangeParent, onCreateFile: onCreateFileParent, onDeleteFile: onDeleteFileParent }: IDEInterfaceProps) {
   const [activeTab, setActiveTab] = useState<"code" | "preview">("code")
-  const [fileContents, setFileContents] = useState<Record<string, string>>({
-    "src/App.tsx": `import React from 'react'
+  const [fileContents, setFileContents] = useState<Record<string, string>>(files)
+  const [activeFile, setActiveFile] = useState<string>(Object.keys(files)[0] || "")
+  const [isTerminalVisible, setIsTerminalVisible] = useState(true)
+  const [terminalHeight, setTerminalHeight] = useState(250)
 
-export default function App() {
-  return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-      <div className="max-w-md mx-auto bg-white rounded-xl shadow-md p-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-4">Hello World!</h1>
-        <p className="text-gray-600">Your AI-generated app is ready!</p>
-      </div>
-    </div>
-  )
-}`,
-    "src/index.tsx": `import React from 'react'
-import { createRoot } from 'react-dom/client'
-import App from './App'
-
-const root = createRoot(document.getElementById('root')!)
-root.render(<App />)`,
-    "package.json": `{
-  "name": "ai-generated-app",
-  "version": "1.0.0",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
-  "devDependencies": {
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
-    "vite": "^4.0.0"
-  }
-}`
-  })
+  // Update file contents when props change
+  useEffect(() => {
+    setFileContents(files)
+    if (Object.keys(files).length > 0 && !activeFile) {
+      setActiveFile(Object.keys(files)[0])
+    }
+  }, [files, activeFile])
 
   const [projectState] = useState<ProjectState>({
-    files: [
-      { name: "src", type: "folder", path: "src", children: [
-        { name: "App.tsx", type: "file", path: "src/App.tsx", content: fileContents["src/App.tsx"] },
-        { name: "index.tsx", type: "file", path: "src/index.tsx", content: fileContents["src/index.tsx"] }
-      ]},
-      { name: "public", type: "folder", path: "public", children: [
-        { name: "index.html", type: "file", path: "public/index.html" }
-      ]},
-      { name: "package.json", type: "file", path: "package.json", content: fileContents["package.json"] },
-      { name: "README.md", type: "file", path: "README.md" }
-    ],
-    activeFile: "src/App.tsx",
+    files: projectStructure,
+    activeFile: activeFile,
     isRunning: false,
     terminal: {
       history: [],
@@ -73,42 +48,56 @@ root.render(<App />)`,
   })
 
   const handleFileSelect = useCallback((path: string) => {
-    // Update active file logic here
+    setActiveFile(path)
   }, [])
 
   const handleFileChange = useCallback((path: string, content: string) => {
     setFileContents(prev => ({ ...prev, [path]: content }))
+    if (onFileChangeParent) {
+      onFileChangeParent(path, content)
+    }
+  }, [onFileChangeParent])
+
+  const handleCreateFile = useCallback((name: string) => {
+    const newFiles = { ...fileContents, [name]: '' }
+    setFileContents(newFiles)
+    if (onCreateFileParent) {
+      onCreateFileParent(name)
+    }
+  }, [fileContents, onCreateFileParent])
+
+  const handleCreateFolder = useCallback((name: string) => {
+    console.log('Create folder:', name)
   }, [])
 
-  const handleCreateFile = useCallback(() => {
-    // Create file logic here
-  }, [])
+  const handleDeleteFile = useCallback((path: string) => {
+    const newFiles = { ...fileContents }
+    delete newFiles[path]
+    setFileContents(newFiles)
+    if (onDeleteFileParent) {
+      onDeleteFileParent(path)
+    }
+  }, [fileContents, onDeleteFileParent])
 
   const handleDownload = useCallback(() => {
-    // Download project logic here
-  }, [])
+    const zip = require('jszip')
+    const JSZip = new zip()
+    
+    Object.entries(fileContents).forEach(([path, content]) => {
+      JSZip.file(path, content)
+    })
+    
+    JSZip.generateAsync({ type: 'blob' }).then((blob: Blob) => {
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'project.zip'
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+  }, [fileContents])
 
-  const renderFileTree = (files: any[], level = 0) => {
-    return files.map((file) => (
-      <div key={file.name}>
-        <div
-          className={`flex items-center gap-2 py-1 px-2 hover:bg-zinc-800 cursor-pointer text-sm ${
-            projectState.activeFile === file.name ? 'bg-zinc-800 text-white' : 'text-zinc-300'
-          }`}
-          style={{ paddingLeft: `${8 + level * 16}px` }}
-          onClick={() => handleFileSelect(file.name)}
-        >
-          {file.type === 'directory' ? (
-            <FolderOpen className="w-4 h-4 text-zinc-400" />
-          ) : (
-            <FileText className="w-4 h-4 text-zinc-400" />
-          )}
-          <span>{file.name}</span>
-        </div>
-        {file.children && renderFileTree(file.children, level + 1)}
-      </div>
-    ))
-  }
+
 
   return (
     <div className="h-full bg-zinc-950 flex flex-col">
@@ -120,6 +109,10 @@ root.render(<App />)`,
               size="sm"
               variant="ghost"
               className="h-8 w-8 p-0 text-zinc-400 hover:text-white"
+              onClick={() => {
+                const fileName = prompt('Enter file name (e.g., src/utils.ts):')
+                if (fileName) handleCreateFile(fileName)
+              }}
             >
               <Plus className="w-4 h-4" />
             </Button>
@@ -162,58 +155,63 @@ root.render(<App />)`,
               Stop
             </Button>
           ) : (
-            <Button onClick={onRun} size="sm" className="h-8 bg-green-600 hover:bg-green-700">
+            <Button onClick={onRun} size="sm" className="h-8 bg-green-600 hover:bg-green-700" disabled={isInitializing}>
               <Play className="w-3 h-3 mr-1" />
-              Run
+              {isInitializing ? 'Starting...' : 'Run'}
             </Button>
           )}
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="flex-1 flex min-h-0">
         {activeTab === "code" ? (
           <>
             {/* File Explorer */}
-            <div className="w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col">
-              <div className="p-3 border-b border-zinc-800">
-                <h3 className="text-sm font-medium text-zinc-200">Files</h3>
-              </div>
-              <div className="flex-1 overflow-y-auto p-2">
-                {renderFileTree(projectState.files)}
-              </div>
+            <div className="w-64">
+              <FileExplorer
+                files={projectStructure}
+                activeFile={activeFile}
+                onFileSelect={handleFileSelect}
+                onCreateFile={handleCreateFile}
+                onCreateFolder={handleCreateFolder}
+                onDeleteFile={handleDeleteFile}
+              />
             </div>
 
             {/* Code Editor */}
-            <div className="flex-1 flex flex-col">
-              <div className="h-8 bg-zinc-900 border-b border-zinc-800 flex items-center px-3">
-                <span className="text-sm text-zinc-400">{projectState.activeFile}</span>
-              </div>
-              <div className="flex-1 p-4">
-                <textarea
-                  value={fileContents[projectState.activeFile || ""] || ""}
-                  onChange={(e) => handleFileChange(projectState.activeFile || "", e.target.value)}
-                  className="w-full h-full bg-zinc-950 text-zinc-100 border border-zinc-700 rounded resize-none focus:outline-none focus:border-zinc-500 p-3 font-mono text-sm"
-                  placeholder="Select a file to start editing..."
-                />
-              </div>
+            <div className="flex-1">
+              <CodeEditor
+                files={projectStructure}
+                activeFile={activeFile}
+                onFileSelect={handleFileSelect}
+                onFileChange={handleFileChange}
+                onFileClose={(path) => console.log('Close file:', path)}
+                fileContents={fileContents}
+              />
             </div>
           </>
         ) : (
           /* Preview Panel */
-          <div className="flex-1 flex flex-col">
-            <div className="h-8 bg-zinc-900 border-b border-zinc-800 flex items-center px-3">
-              <span className="text-sm text-zinc-400">Preview</span>
-            </div>
-            <div className="flex-1 bg-white flex items-center justify-center">
-              <div className="text-center text-zinc-500">
-                <Eye className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Preview will appear here</p>
-                <p className="text-sm mt-1">Click Run to start the development server</p>
-              </div>
-            </div>
+          <div className="flex-1">
+            <PreviewPanel
+              url={serverUrl || undefined}
+              isLoading={isInitializing}
+              fileContents={fileContents}
+              activeFile={activeFile}
+            />
           </div>
         )}
+        </div>
+        
+        {/* Terminal */}
+        <Terminal
+          isVisible={isTerminalVisible}
+          onToggle={() => setIsTerminalVisible(!isTerminalVisible)}
+          height={terminalHeight}
+          onHeightChange={setTerminalHeight}
+        />
       </div>
     </div>
   )
